@@ -1,0 +1,201 @@
+/* QuickComment in-feed UI.
+   LinkedIn-like, light only, monochrome: LinkedIn's own ink at 90% and 60%,
+   hairline borders, pill buttons. The one accent is the green star. */
+
+.qc-root {
+  --qc-ink: rgba(0, 0, 0, 0.9);
+  --qc-ink-soft: rgba(0, 0, 0, 0.6);
+  --qc-line: rgba(0, 0, 0, 0.15);
+  --qc-line-soft: rgba(0, 0, 0, 0.08);
+  --qc-wash: #f3f2ef;
+  --qc-paper: #ffffff;
+  --qc-star: #1ec371;
+  --qc-danger: #cc1016;
+
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  color: var(--qc-ink);
+  font-size: 14px;
+  line-height: 1.4;
+  padding: 0 16px 8px;
+  position: relative;
+  z-index: 2; /* above LinkedIn's full-card overlay link */
+}
+
+.qc-trigger,
+.qc-pill,
+.qc-go,
+.qc-copy {
+  font: inherit;
+  cursor: pointer;
+  border-radius: 999px;
+  border: 1px solid var(--qc-ink-soft);
+  background: transparent;
+  color: var(--qc-ink-soft);
+  line-height: 1.3;
+  font-weight: 600;
+  transition: background 100ms ease, color 100ms ease, border-color 100ms ease, box-shadow 100ms ease;
+}
+.qc-trigger:hover,
+.qc-pill:hover,
+.qc-copy:hover {
+  color: var(--qc-ink);
+  border-color: var(--qc-ink);
+  background: rgba(0, 0, 0, 0.04);
+  box-shadow: inset 0 0 0 1px var(--qc-ink);
+}
+
+/* Trigger: LinkedIn's secondary pill, star in green. */
+.qc-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 14px;
+  font-size: 14px;
+}
+.qc-trigger--open {
+  color: var(--qc-ink);
+  border-color: var(--qc-ink);
+  box-shadow: inset 0 0 0 1px var(--qc-ink);
+}
+.qc-trigger__spark {
+  color: var(--qc-star);
+  font-size: 13px;
+}
+
+/* Panel: flat, hairline, sits where the comment editor opens. */
+.qc-panel {
+  align-self: stretch;
+  margin-top: 8px;
+  padding: 12px 12px 10px;
+  border: 1px solid var(--qc-line-soft);
+  border-radius: 8px;
+  background: var(--qc-paper);
+}
+
+.qc-knobs {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.qc-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.qc-row__label {
+  width: 60px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--qc-ink-soft);
+}
+.qc-pills {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.qc-pill {
+  padding: 3px 12px;
+  font-size: 13px;
+}
+.qc-pill--on,
+.qc-pill--on:hover {
+  color: #fff;
+  background: var(--qc-ink);
+  border-color: var(--qc-ink);
+  box-shadow: none;
+}
+
+.qc-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+}
+.qc-go {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 16px;
+  font-size: 14px;
+  color: #fff;
+  background: var(--qc-ink);
+  border-color: var(--qc-ink);
+}
+.qc-go::before {
+  content: "✦";
+  color: var(--qc-star);
+  font-size: 12px;
+}
+.qc-go:hover { background: #000; }
+.qc-go:disabled { opacity: 0.55; cursor: default; }
+.qc-go--busy { animation: qc-pulse 1.1s ease-in-out infinite; }
+@keyframes qc-pulse {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 0.9; }
+}
+.qc-status { font-size: 13px; color: var(--qc-ink-soft); }
+.qc-status--error { color: var(--qc-danger); }
+
+.qc-results {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+}
+.qc-read {
+  font-size: 12px;
+  color: var(--qc-ink-soft);
+  padding: 0 2px 2px;
+}
+.qc-read::before {
+  content: "✦ ";
+  color: var(--qc-star);
+}
+.qc-result {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--qc-line-soft);
+  background: var(--qc-wash);
+}
+.qc-result--used {
+  background: var(--qc-paper);
+  border-color: var(--qc-ink);
+}
+.qc-result__text {
+  flex: 1;
+  white-space: pre-wrap;
+  font-size: 14px;
+}
+.qc-copy {
+  flex: 0 0 auto;
+  padding: 3px 12px;
+  font-size: 13px;
+}
+.qc-copy--done,
+.qc-copy--done:hover {
+  color: #fff;
+  background: var(--qc-ink);
+  border-color: var(--qc-ink);
+  box-shadow: none;
+}
+.qc-copy--done::before {
+  content: "✦ ";
+  color: var(--qc-star);
+}
+
+.qc-foot {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--qc-ink-soft);
+  margin-top: 2px;
+}
+.qc-link { color: inherit; text-decoration: underline; }
+
+.qc-setup__text { margin-bottom: 8px; }

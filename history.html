@@ -1,0 +1,68 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>QuickComment history</title>
+  <style>
+    :root {
+      --ink: rgba(0,0,0,0.9); --ink-soft: rgba(0,0,0,0.6); --line: rgba(0,0,0,0.15); --line-soft: rgba(0,0,0,0.08);
+      --wash: #f3f2ef; --paper: #ffffff; --star: #1ec371; --danger: #cc1016;
+    }
+    * { box-sizing: border-box; }
+    body { font: 14px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; margin: 0; padding: 24px 20px; color: var(--ink); background: var(--wash); }
+    main { max-width: 880px; margin: 0 auto; }
+    h1 { font-size: 20px; margin: 0 0 14px; display: flex; align-items: center; gap: 6px; }
+    h1 .spark { color: var(--star); }
+    .summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 16px; }
+    .summary div { border: 1px solid var(--line-soft); border-radius: 8px; padding: 10px 12px; background: var(--paper); }
+    .summary b { display: block; font-size: 20px; }
+    .summary span { font-size: 12px; color: var(--ink-soft); }
+    .summary .spark { color: var(--star); font-size: 14px; }
+    .bar { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }
+    input[type=search] { flex: 1; min-width: 200px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 4px; font: inherit; background: var(--paper); color: var(--ink); }
+    input[type=search]:focus { outline: none; border-color: var(--ink); box-shadow: inset 0 0 0 1px var(--ink); }
+    button { font: inherit; font-weight: 600; padding: 6px 14px; border-radius: 999px; border: 1px solid var(--ink-soft); background: transparent; color: var(--ink-soft); cursor: pointer; }
+    button:hover { color: var(--ink); border-color: var(--ink); box-shadow: inset 0 0 0 1px var(--ink); }
+    button.danger { color: var(--danger); border-color: var(--danger); }
+    .entry { border: 1px solid var(--line-soft); border-radius: 8px; padding: 12px 14px; margin-bottom: 10px; background: var(--paper); }
+    .entry--unserved { border-left: 3px solid var(--danger); }
+    .entry__head { display: flex; justify-content: space-between; gap: 10px; font-size: 12px; color: var(--ink-soft); flex-wrap: wrap; }
+    .entry__author { font-weight: 600; color: var(--ink); }
+    .entry__post { margin: 6px 0; font-size: 13px; color: var(--ink-soft); white-space: pre-wrap; }
+    .knobs { font-size: 12px; }
+    .entry__read { font-size: 12px; color: var(--ink-soft); margin: 2px 0 4px; }
+    .entry__read::before { content: "✦ "; color: var(--star); }
+    .comment { display: flex; gap: 8px; align-items: flex-start; padding: 8px 10px; border-radius: 8px; background: var(--wash); margin-top: 6px; border: 1px solid transparent; }
+    .comment--copied { border-color: var(--ink); background: var(--paper); }
+    .comment__text { flex: 1; white-space: pre-wrap; }
+    .comment button { font-size: 12px; padding: 3px 10px; }
+    .tag { font-size: 12px; color: var(--ink); font-weight: 600; align-self: center; }
+    .tag::before { content: "✦ "; color: var(--star); }
+    .empty { color: var(--ink-soft); padding: 30px 0; text-align: center; }
+  </style>
+</head>
+<body>
+<main>
+  <h1><span class="spark">✦</span> QuickComment history</h1>
+
+  <div class="summary">
+    <div><b id="sumGen">0</b><span>generations, all time</span></div>
+    <div><b><span class="spark">✦</span> <span id="sumRate">0%</span></b><span id="sumRateLabel">generations that landed a copy</span></div>
+    <div><b id="sumUnserved">0</b><span id="sumUnservedLabel">posts with no copy</span></div>
+    <div><b id="sumCost">$0.000</b><span id="sumCostLabel">spent, all time</span></div>
+    <div><b id="sumMonth">$0.000</b><span id="sumMonthLabel">spent this month</span></div>
+  </div>
+
+  <div class="bar">
+    <input id="q" type="search" placeholder="Search author, post, or comment text">
+    <button id="export">Export JSON</button>
+    <button id="clear" class="danger">Clear history</button>
+  </div>
+
+  <div id="list"></div>
+</main>
+
+  <script src="config.js"></script>
+  <script src="history.js"></script>
+</body>
+</html>
