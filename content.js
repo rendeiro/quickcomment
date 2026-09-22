@@ -173,7 +173,7 @@
     const trigger = document.createElement("button");
     trigger.type = "button";
     trigger.className = "qc-trigger";
-    trigger.innerHTML = '<span class="qc-trigger__spark">✦</span> Comment ideas';
+    trigger.innerHTML = '<span class="qc-trigger__spark">✦</span> Propose comment ideas';
     trigger.addEventListener("click", (e) => {
       e.preventDefault();
       e.stopPropagation();
@@ -198,7 +198,13 @@
       root.appendChild(buildNotePanel(res.error));
       return;
     }
-    root.appendChild(res.hasKey ? buildPanel(card) : buildSetupPanel());
+    if (!res.hasKey) {
+      root.appendChild(buildSetupPanel());
+      return;
+    }
+    const panel = buildPanel(card);
+    root.appendChild(panel);
+    panel.qcGenerate();
   }
 
   function buildNotePanel(text) {
@@ -227,32 +233,45 @@
     return panel;
   }
 
+  // Panel: results first, then a footer with Regenerate and a collapsed
+  // Options toggle for the knobs. Every round's options and votes are kept
+  // on the panel so regeneration can send them back as feedback.
   function buildPanel(card) {
     const panel = document.createElement("div");
     panel.className = "qc-panel";
     panel.addEventListener("click", (e) => e.stopPropagation());
-
-    const knobsWrap = document.createElement("div");
-    knobsWrap.className = "qc-knobs";
-    for (const group of Object.keys(QC_KNOBS)) knobsWrap.appendChild(buildKnobRow(group));
-    panel.appendChild(knobsWrap);
-
-    const actions = document.createElement("div");
-    actions.className = "qc-actions";
-    const go = document.createElement("button");
-    go.type = "button";
-    go.className = "qc-go";
-    go.textContent = "Generate";
-    const status = document.createElement("span");
-    status.className = "qc-status";
-    actions.append(go, status);
-    panel.appendChild(actions);
+    const rounds = []; // [{ id, comments: [text], votes: {index: 1|-1} }]
 
     const results = document.createElement("div");
     results.className = "qc-results";
-    panel.appendChild(results);
 
-    go.addEventListener("click", () => generate(card, go, status, results));
+    const footer = document.createElement("div");
+    footer.className = "qc-actions";
+    const go = document.createElement("button");
+    go.type = "button";
+    go.className = "qc-go";
+    go.textContent = "Regenerate";
+    const optionsBtn = document.createElement("button");
+    optionsBtn.type = "button";
+    optionsBtn.className = "qc-options-toggle";
+    optionsBtn.textContent = "Options";
+    const status = document.createElement("span");
+    status.className = "qc-status";
+    footer.append(go, optionsBtn, status);
+
+    const knobsWrap = document.createElement("div");
+    knobsWrap.className = "qc-knobs";
+    knobsWrap.hidden = true;
+    for (const group of Object.keys(QC_KNOBS)) knobsWrap.appendChild(buildKnobRow(group));
+    optionsBtn.addEventListener("click", () => {
+      knobsWrap.hidden = !knobsWrap.hidden;
+      optionsBtn.classList.toggle("qc-options-toggle--open", !knobsWrap.hidden);
+    });
+
+    panel.append(results, footer, knobsWrap);
+
+    panel.qcGenerate = () => generate(card, { go, status, results, rounds });
+    go.addEventListener("click", panel.qcGenerate);
     return panel;
   }
 
@@ -282,7 +301,8 @@
     return row;
   }
 
-  async function generate(card, go, status, results) {
+  async function generate(card, ui) {
+    const { go, status, results, rounds } = ui;
     const post = getPostText(card);
     const author = getAuthor(card);
     if (!post) {
@@ -291,32 +311,39 @@
     }
     go.disabled = true;
     go.classList.add("qc-go--busy");
-    status.textContent = "Writing…";
+    status.textContent = rounds.length ? "Rewriting with your feedback…" : "Reading the post…";
     status.classList.remove("qc-status--error");
-    results.replaceChildren();
 
-    const response = await send({ type: "qc-generate", post, author, knobs: { ...knobs } });
+    const feedback = rounds.flatMap((r) =>
+      r.comments.map((text, i) => ({ text, vote: r.votes[i] || 0 }))
+    );
+    const response = await send({ type: "qc-generate", post, author, knobs: { ...knobs }, feedback });
     go.disabled = false;
     go.classList.remove("qc-go--busy");
 
-    if (!response || !response.ok) {
-      status.textContent = response?.error || "No response from the extension.";
+    if (!response.ok) {
+      status.textContent = response.error || "No response from the extension.";
       status.classList.add("qc-status--error");
       return;
     }
     status.textContent = "";
+    results.replaceChildren();
+
+    const round = { id: response.id, comments: response.comments, votes: {} };
+    rounds.push(round);
+
     if (response.read) {
       const read = document.createElement("div");
       read.className = "qc-read";
       read.textContent = `Read as: ${response.read.gist} Tone: ${response.read.author_tone}. Hook: ${response.read.hook}`;
       results.appendChild(read);
     }
-    response.comments.forEach((text, i) => results.appendChild(buildResult(card, text, response.id, i)));
+    response.comments.forEach((text, i) => results.appendChild(buildResult(round, text, i)));
 
     const foot = document.createElement("div");
     foot.className = "qc-foot";
     const cost = document.createElement("span");
-    cost.textContent = `${response.model} · ~$${(response.cost || 0).toFixed(4)}`;
+    cost.textContent = `${response.model} · ~$${(response.cost || 0).toFixed(4)}${rounds.length > 1 ? ` · round ${rounds.length}` : ""}`;
     const hist = document.createElement("a");
     hist.href = "#";
     hist.className = "qc-link";
@@ -329,13 +356,40 @@
     results.appendChild(foot);
   }
 
-  function buildResult(card, text, id, index) {
+  function buildResult(round, text, index) {
     const item = document.createElement("div");
     item.className = "qc-result";
 
     const body = document.createElement("div");
     body.className = "qc-result__text";
     body.textContent = text;
+
+    const side = document.createElement("div");
+    side.className = "qc-result__side";
+
+    const votes = document.createElement("div");
+    votes.className = "qc-votes";
+    const up = document.createElement("button");
+    up.type = "button";
+    up.className = "qc-vote";
+    up.textContent = "▲";
+    up.title = "Good. More like this.";
+    const down = document.createElement("button");
+    down.type = "button";
+    down.className = "qc-vote";
+    down.textContent = "▼";
+    down.title = "Bad. Avoid this.";
+    const setVote = (v) => {
+      const next = round.votes[index] === v ? 0 : v;
+      round.votes[index] = next;
+      up.classList.toggle("qc-vote--on", next === 1);
+      down.classList.toggle("qc-vote--on", next === -1);
+      item.classList.toggle("qc-result--down", next === -1);
+      if (round.id != null) send({ type: "qc-vote", id: round.id, index, vote: next });
+    };
+    up.addEventListener("click", () => setVote(1));
+    down.addEventListener("click", () => setVote(-1));
+    votes.append(up, down);
 
     const copy = document.createElement("button");
     copy.type = "button";
@@ -347,13 +401,14 @@
         copy.textContent = "Copied";
         copy.classList.add("qc-copy--done");
         item.classList.add("qc-result--used");
-        if (id != null) send({ type: "qc-mark-copied", id, index });
+        if (round.id != null) send({ type: "qc-mark-copied", id: round.id, index });
       } catch {
         copy.textContent = "Failed";
       }
     });
 
-    item.append(body, copy);
+    side.append(votes, copy);
+    item.append(body, side);
     return item;
   }
 

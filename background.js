@@ -27,6 +27,10 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     sendResponse({ ok: true });
     return false;
   }
+  if (message?.type === "qc-vote") {
+    markVote(message.id, message.index, message.vote).then(() => sendResponse({ ok: true }));
+    return true;
+  }
   if (message?.type === "qc-mark-copied") {
     markCopied(message.id, message.index).then(() => sendResponse({ ok: true }));
     return true;
@@ -60,7 +64,8 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
       const { author, knobs } = message;
       const post = trimPost(message.post);
-      const prompt = buildPrompt({ post, author, knobs, persona: settings.persona });
+      const taste = await recentTaste(hashText(post));
+      const prompt = buildPrompt({ post, author, knobs, persona: settings.persona, feedback: message.feedback || [], taste });
       const data = await callClaude(settings, {
         system: prompt.system,
         user: prompt.user,
@@ -192,6 +197,7 @@ async function recordHistory({ data, author, post, knobs, comments, read }) {
     comments,
     read: read || null,
     copied: [], // indices of the options the user copied (unique)
+    votes: {}, // index -> 1 (up) | -1 (down)
     copies: 0, // total copy clicks on this generation
     postHash: hashText(post),
     model: data.model,
@@ -204,6 +210,36 @@ async function recordHistory({ data, author, post, knobs, comments, read }) {
   if (history.length > QC_HISTORY_MAX) history.length = QC_HISTORY_MAX;
   await chrome.storage.local.set({ history });
   return entry;
+}
+
+async function markVote(id, index, vote) {
+  const { history = [] } = await chrome.storage.local.get("history");
+  const entry = history.find((h) => h.id === id);
+  if (!entry) return;
+  entry.votes = entry.votes || {};
+  if (vote) entry.votes[index] = vote;
+  else delete entry.votes[index];
+  await chrome.storage.local.set({ history });
+}
+
+// Taste memory: the most recent up- and down-voted comments on other posts,
+// a handful each, so regeneration on a new post can lean toward what the
+// user has liked before and away from what they have rejected.
+async function recentTaste(excludePostHash) {
+  const { history = [] } = await chrome.storage.local.get("history");
+  const liked = [];
+  const disliked = [];
+  for (const h of history) {
+    if (h.postHash === excludePostHash || !h.votes) continue;
+    for (const [i, v] of Object.entries(h.votes)) {
+      const text = h.comments?.[Number(i)];
+      if (!text) continue;
+      if (v === 1 && liked.length < 5) liked.push(text);
+      if (v === -1 && disliked.length < 5) disliked.push(text);
+    }
+    if (liked.length >= 5 && disliked.length >= 5) break;
+  }
+  return { liked, disliked };
 }
 
 async function markCopied(id, index) {
@@ -232,7 +268,28 @@ function knobPrompt(group, key) {
   return opt.prompt;
 }
 
-function buildPrompt({ post, author, knobs, persona }) {
+function feedbackBlock(feedback, taste) {
+  const lines = [];
+  const up = feedback.filter((f) => f.vote === 1);
+  const down = feedback.filter((f) => f.vote === -1);
+  const none = feedback.filter((f) => !f.vote);
+  if (feedback.length) {
+    lines.push("This is a regeneration. Earlier options for this same post, with the user's reaction:");
+    up.forEach((f) => lines.push(`- GOOD (more like this): ${f.text}`));
+    down.forEach((f) => lines.push(`- BAD (avoid this angle, tone and shape): ${f.text}`));
+    none.forEach((f) => lines.push(`- no reaction: ${f.text}`));
+    lines.push("Write three new options. None may repeat an earlier option's angle or opening. If any were marked GOOD, keep their spirit (what they pick up on, their tone and length) and vary the angle. If any were marked BAD, treat that as a hard constraint: different angle, different rhythm, and do not reuse their wording or their kind of joke or question.");
+  }
+  if (taste.liked.length || taste.disliked.length) {
+    lines.push("");
+    lines.push("The user's taste from earlier posts (different posts, so do not reuse content, only the manner):");
+    taste.liked.forEach((t) => lines.push(`- liked: ${t}`));
+    taste.disliked.forEach((t) => lines.push(`- disliked: ${t}`));
+  }
+  return lines.join("\n");
+}
+
+function buildPrompt({ post, author, knobs, persona, feedback = [], taste = { liked: [], disliked: [] } }) {
   const system = [
     "You draft LinkedIn comments for the user to post under other people's posts. Think of it as replying to a message from someone you know a bit: light, quick, human. Not a fan, not a marketer, not an assistant, not a critic writing a review.",
     "",
@@ -274,6 +331,7 @@ function buildPrompt({ post, author, knobs, persona }) {
       : "",
   ].join("\n");
 
+  const fb = feedbackBlock(feedback, taste);
   const user = [
     `Post author: ${author || "unknown"}`,
     "",
@@ -281,6 +339,7 @@ function buildPrompt({ post, author, knobs, persona }) {
     "<post>",
     post,
     "</post>",
+    fb ? "\n" + fb : "",
     "",
     `Return JSON: a "read" object (gist, author_tone, author_wants, hook, language), then a "comments" array of ${QC_OPTION_COUNT} objects, each with a "text" field.`,
   ].join("\n");

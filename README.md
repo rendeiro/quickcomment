@@ -49,11 +49,14 @@ platform.claude.com, then paste the new one under the popup's Settings tab.
 ## Use it
 
 1. Open the LinkedIn feed. Under each post's Like / Comment / Repost row,
-   right-aligned, there is a **✦ Comment ideas** pill.
-2. Click it. Pick pills for Size, Attitude and Style. They stick.
-3. **Generate.** The grey "Read as" line shows what it understood about the
-   post. Three options follow.
+   right-aligned, there is a **✦ Propose comment ideas** pill.
+2. Click it. It reads the post and writes three options right away. The
+   grey "Read as" line shows what it understood.
+3. **▲ / ▼** on each option tells it what was good or bad.
+   **Regenerate** writes three new options using those votes, plus your
+   recent votes on other posts as a taste memory.
 4. **Copy** the one you like, click LinkedIn's Comment, paste.
+5. **Options** (collapsed under the footer) holds the knobs. They stick.
 
 | Knob | Options |
 | --- | --- |
@@ -81,7 +84,8 @@ every generation: author, post excerpt, the read, the knobs, the three
 options, which one you copied, tokens and cost. Search, export as JSON, or
 clear.
 
-Two quality numbers, in the popup and on the history page:
+Votes are stored per option and shown on the history page. Two quality
+numbers, in the popup and on the history page:
 
 - **Copy rate**: generations where you copied at least one option.
 - **Posts with no copy**: posts where you generated but used nothing. The

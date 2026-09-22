@@ -85,6 +85,13 @@ function renderEntry(h) {
       setTimeout(() => (btn.textContent = "Copy"), 1500);
     });
     c.append(body);
+    const v = (h.votes || {})[i];
+    if (v) {
+      const vt = document.createElement("span");
+      vt.className = "vote " + (v === 1 ? "vote--up" : "vote--down");
+      vt.textContent = v === 1 ? "▲" : "▼";
+      c.append(vt);
+    }
     if (copied.includes(i)) {
       const tag = document.createElement("span");
       tag.className = "tag";
