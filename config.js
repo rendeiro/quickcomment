@@ -9,17 +9,18 @@ const QC_API = {
   ENDPOINT: "https://api.anthropic.com/v1/messages",
   VERSION: "2023-06-01",
   // Hard per-request output ceiling. The read block plus three comments as
-  // JSON fit in ~400 tokens even at the "mini" size; 640 leaves headroom.
+  // JSON fit in ~400 tokens; 640 leaves headroom.
   MAX_TOKENS: 640,
   // Posts longer than this are trimmed before being sent (roughly 600
   // tokens). Long posts rarely need more than their opening to comment on.
   MAX_POST_CHARS: 2500,
 };
 
-// The model. Opus 4.8 at low effort, no extended thinking: it reads tone
-// and detail well, and the output is tiny so it stays quick. Prices are USD
-// per million tokens, list price as of September 2026.
-const QC_MODEL = { id: "claude-opus-4-8", inputPerM: 5.0, outputPerM: 25.0, effort: "low" };
+// The model. Opus 5 at low effort with thinking switched off: same price as
+// Opus 4.8, newer, and with thinking off the output stays tiny and quick.
+// Sonnet 5 ($2 in / $10 out) is the cheap alternative: swap the id and the
+// two prices. Prices are USD per million tokens, list price, September 2026.
+const QC_MODEL = { id: "claude-opus-5", inputPerM: 5.0, outputPerM: 25.0, effort: "low" };
 
 // Spend guard. Every request's input + output tokens are added to a counter
 // in chrome.storage.local, keyed by calendar month. When the counter reaches
@@ -39,29 +40,26 @@ const QC_KNOBS = {
     options: [
       { key: "ultra", label: "Ultra short", prompt: "One line, at most 8 words. A fragment is fine." },
       { key: "short", label: "Short", prompt: "One sentence, two at most, under 20 words total." },
-      { key: "mini", label: "Mini", prompt: "Two or three short sentences, under 45 words total. The second sentence must add something the first did not." },
     ],
   },
   attitude: {
     label: "Attitude",
     options: [
       { key: "supportive", label: "Supportive", prompt: "On the author's side. Show you understood the point by extending it with a detail of your own, not by praising it. Warmth comes from specificity." },
-      { key: "informative", label: "Informative", prompt: "Add one concrete fact, number, example, or practical tip the post did not mention. State it plainly, no lecture." },
-      { key: "contrasting", label: "Contrasting", prompt: "Push back or offer a different angle. Name exactly where you differ and why, in one move. Friendly, not hedged, no 'with respect'." },
+      { key: "insights", label: "Insights", prompt: "Add one concrete thing the post did not say: a number, an example, a counterexample, a practical tip, or a sharp question. Can agree or disagree. State it plainly, no lecture." },
       { key: "funny", label: "Funny", prompt: "Dry wit. One playful observation or exaggeration tied to a detail in the post. No puns on the author's name, nothing at their expense." },
     ],
   },
   style: {
     label: "Style",
     options: [
-      { key: "emojis", label: "Emojis", prompt: "One or two emojis that fit the content, placed at the end of a sentence, never as the first character. Exclamation marks allowed." },
-      { key: "chill", label: "Chill", prompt: "Casual and conversational, like a message to a colleague you like. No emojis, no exclamation marks." },
-      { key: "serious", label: "Serious", prompt: "Measured and professional. Full sentences, no emojis, no slang, no exclamation marks." },
+      { key: "emoji", label: "Emoji", prompt: "Exactly one emoji per option, at the end of a sentence, never as the first character. One exclamation mark allowed across all options." },
+      { key: "neutral", label: "Neutral", prompt: "Conversational but clean: contractions fine, no slang, no emojis, no exclamation marks." },
     ],
   },
 };
 
-const QC_DEFAULT_KNOBS = { size: "short", attitude: "supportive", style: "chill" };
+const QC_DEFAULT_KNOBS = { size: "short", attitude: "supportive", style: "neutral" };
 
 // How many comment options to produce per generation.
 const QC_OPTION_COUNT = 3;

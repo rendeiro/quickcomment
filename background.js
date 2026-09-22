@@ -299,10 +299,12 @@ async function callClaude(settings, { system, user, schema, maxTokens }) {
   };
   if (settings.workspaceId) headers["anthropic-workspace-id"] = settings.workspaceId;
 
-  // `thinking` is omitted, so nothing is spent on reasoning tokens.
+  // Opus 5 thinks by default. Switch it off (allowed at effort "low") so
+  // no reasoning tokens are billed and max_tokens is all for the answer.
   const body = {
     model: QC_MODEL.id,
     max_tokens: maxTokens,
+    thinking: { type: "disabled" },
     system,
     messages: [{ role: "user", content: user }],
     output_config: { effort: QC_MODEL.effort },

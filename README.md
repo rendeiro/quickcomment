@@ -57,14 +57,15 @@ platform.claude.com, then paste the new one under the popup's Settings tab.
 
 | Knob | Options |
 | --- | --- |
-| Size | Ultra short (one line, 8 words max), Short (one sentence, 20 words max), Mini (2 to 3 sentences, 45 words max) |
-| Attitude | Supportive, Informative, Contrasting, Funny |
-| Style | Emojis, Chill, Serious |
+| Size | Ultra short (one line, 8 words max), Short (one sentence, 20 words max) |
+| Attitude | Supportive, Insights, Funny |
+| Style | Emoji (exactly one), Neutral |
 
 ## Cost
 
-- Model: Claude Opus 4.8 at low effort, no extended thinking.
-  $5 per million input tokens, $25 per million output.
+- Model: Claude Opus 5 at low effort, thinking switched off.
+  $5 per million input tokens, $25 per million output. Sonnet 5 is the
+  cheap alternative at $2 / $10, about a third of the cost.
 - A generation is about 1,100 tokens, roughly $0.01.
 - Output is capped at 640 tokens per request. Posts are trimmed to 2,500
   characters before sending.
@@ -117,8 +118,9 @@ Things you will probably want to change:
 - **Knobs**: add an option to `QC_KNOBS` in `config.js`. The panel row and
   the prompt pick it up. Nothing else changes.
 - **Model**: `QC_MODEL` in `config.js`. Update the prices next to it so the
-  cost tracking stays right. Models without an `effort` parameter need the
-  `output_config.effort` line in `callClaude()` removed.
+  cost tracking stays right. Sonnet 5 works as a drop-in. Models without an
+  `effort` parameter (Haiku 4.5) need the `output_config.effort` and
+  `thinking` lines in `callClaude()` removed.
 
 Build a release zip:
 

@@ -20,7 +20,12 @@
 
   let knobs = { ...QC_DEFAULT_KNOBS };
   chrome.storage.local.get("knobs").then((s) => {
-    if (s.knobs) knobs = { ...knobs, ...s.knobs };
+    if (!s.knobs) return;
+    // Keep stored choices only if they still exist (knob sets change).
+    for (const group of Object.keys(QC_KNOBS)) {
+      const valid = QC_KNOBS[group].options.some((o) => o.key === s.knobs[group]);
+      if (valid) knobs[group] = s.knobs[group];
+    }
   });
 
   // ------------------------------------------------------------------
