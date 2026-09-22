@@ -18,9 +18,24 @@
   const CONTROL_BUTTON_PREFIX = "Open control menu for post by ";
   const CONTROL_BUTTON_SELECTOR = `button[aria-label^="${CONTROL_BUTTON_PREFIX}"]`;
 
+  // chrome.runtime.sendMessage throws synchronously once the extension has
+  // been reloaded while this tab stayed open ("Extension context
+  // invalidated"). Route every message through here so that case turns into
+  // a visible note instead of a silent failure.
+  const STALE_MSG = "QuickComment was updated. Refresh this page (Cmd+R) to keep using it.";
+  async function send(message) {
+    try {
+      const res = await chrome.runtime.sendMessage(message);
+      return res || { ok: false, error: "No response from the extension. Refresh this page." };
+    } catch (err) {
+      const stale = /context invalidated|Extension context/i.test(String(err));
+      return { ok: false, error: stale ? STALE_MSG : String(err?.message || err) };
+    }
+  }
+
   let knobs = { ...QC_DEFAULT_KNOBS };
   chrome.storage.local.get("knobs").then((s) => {
-    if (!s.knobs) return;
+    if (!s || !s.knobs) return;
     // Keep stored choices only if they still exist (knob sets change).
     for (const group of Object.keys(QC_KNOBS)) {
       const valid = QC_KNOBS[group].options.some((o) => o.key === s.knobs[group]);
@@ -178,8 +193,22 @@
       return;
     }
     trigger.classList.add("qc-trigger--open");
-    const res = await chrome.runtime.sendMessage({ type: "qc-has-key" }).catch(() => null);
-    root.appendChild(res?.hasKey ? buildPanel(card) : buildSetupPanel());
+    const res = await send({ type: "qc-has-key" });
+    if (!res.ok) {
+      root.appendChild(buildNotePanel(res.error));
+      return;
+    }
+    root.appendChild(res.hasKey ? buildPanel(card) : buildSetupPanel());
+  }
+
+  function buildNotePanel(text) {
+    const panel = document.createElement("div");
+    panel.className = "qc-panel";
+    const msg = document.createElement("div");
+    msg.className = "qc-status qc-status--error";
+    msg.textContent = text;
+    panel.appendChild(msg);
+    return panel;
   }
 
   function buildSetupPanel() {
@@ -193,7 +222,7 @@
     btn.type = "button";
     btn.className = "qc-go";
     btn.textContent = "Set up key";
-    btn.addEventListener("click", () => chrome.runtime.sendMessage({ type: "qc-open-options" }));
+    btn.addEventListener("click", () => send({ type: "qc-open-options" }));
     panel.append(msg, btn);
     return panel;
   }
@@ -266,12 +295,7 @@
     status.classList.remove("qc-status--error");
     results.replaceChildren();
 
-    let response;
-    try {
-      response = await chrome.runtime.sendMessage({ type: "qc-generate", post, author, knobs: { ...knobs } });
-    } catch (err) {
-      response = { ok: false, error: String(err) };
-    }
+    const response = await send({ type: "qc-generate", post, author, knobs: { ...knobs } });
     go.disabled = false;
     go.classList.remove("qc-go--busy");
 
@@ -299,7 +323,7 @@
     hist.textContent = "History";
     hist.addEventListener("click", (e) => {
       e.preventDefault();
-      chrome.runtime.sendMessage({ type: "qc-open-history" });
+      send({ type: "qc-open-history" });
     });
     foot.append(cost, hist);
     results.appendChild(foot);
@@ -323,7 +347,7 @@
         copy.textContent = "Copied";
         copy.classList.add("qc-copy--done");
         item.classList.add("qc-result--used");
-        if (id != null) chrome.runtime.sendMessage({ type: "qc-mark-copied", id, index });
+        if (id != null) send({ type: "qc-mark-copied", id, index });
       } catch {
         copy.textContent = "Failed";
       }
