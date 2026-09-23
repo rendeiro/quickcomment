@@ -11,8 +11,40 @@
 (() => {
   "use strict";
 
+  // Profile pages: only used by onboarding. The popup opens /in/me/, which
+  // LinkedIn redirects to the user's own profile, and sets a short-lived
+  // flag. Landing here with the flag set means this page is the user.
+  if (location.pathname.startsWith("/in/")) {
+    captureIdentity();
+    return;
+  }
+
   const ALLOWED_PATHS = ["/feed", "/posts/"];
   if (!ALLOWED_PATHS.some((p) => location.pathname.startsWith(p))) return;
+
+  async function captureIdentity() {
+    let s = null;
+    try { s = await chrome.storage.local.get("pendingIdentity"); } catch { return; }
+    const pending = s && s.pendingIdentity && Date.now() - s.pendingIdentity < 5 * 60 * 1000;
+    if (!pending) return;
+    const m = location.pathname.match(/^\/in\/([^/?#]+)/);
+    const vanity = m ? decodeURIComponent(m[1]).toLowerCase() : "";
+    if (!vanity || vanity === "me") return;
+    // The profile's <h1> is the person's name. Poll briefly for it.
+    let name = "";
+    for (let i = 0; i < 40 && !name; i += 1) {
+      const h1 = document.querySelector("main h1, h1");
+      name = h1 ? (h1.textContent || "").replace(/\s+/g, " ").trim() : "";
+      if (!name) await new Promise((r) => setTimeout(r, 200));
+    }
+    await chrome.storage.local.set({ meVanity: vanity, meName: name, meAt: Date.now(), meSource: "profile visit", pendingIdentity: 0 });
+    console.log(`[QuickComment] identity captured: ${name} (/in/${vanity})`);
+    const toast = document.createElement("div");
+    toast.className = "qc-toast";
+    toast.innerHTML = `<span class="qc-trigger__spark">✦</span> QuickComment now knows you as <b></b>. You can close this tab and go back to the extension popup.`;
+    toast.querySelector("b").textContent = name || `/in/${vanity}`;
+    document.body.appendChild(toast);
+  }
 
   const WIRED_ATTR = "data-qc-wired";
   const CONTROL_BUTTON_PREFIX = "Open control menu for post by ";

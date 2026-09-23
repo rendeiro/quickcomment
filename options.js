@@ -1,10 +1,11 @@
 const $ = (id) => document.getElementById(id);
+const send = (m) => chrome.runtime.sendMessage(m).catch((e) => ({ ok: false, error: String(e) }));
 
 // ---------------------------------------------------------------------
-// Tabs. Setup is the only tab until a key passes the test; after that the
-// popup opens on Activity and Setup disappears.
+// Tabs. Setup is the only tab until the walkthrough is finished; after
+// that the popup opens on Activity and Setup disappears.
 // ---------------------------------------------------------------------
-let verified = false;
+let setupDone = false;
 
 function showTab(name) {
   document.querySelectorAll("nav button").forEach((b) => b.classList.toggle("on", b.dataset.tab === name));
@@ -14,9 +15,9 @@ function showTab(name) {
 function applyMode() {
   const setupBtn = document.querySelector('nav button[data-tab="setup"]');
   const others = document.querySelectorAll('nav button:not([data-tab="setup"])');
-  setupBtn.style.display = verified ? "none" : "";
-  others.forEach((b) => (b.style.display = verified ? "" : "none"));
-  showTab(verified ? "activity" : "setup");
+  setupBtn.style.display = setupDone ? "none" : "";
+  others.forEach((b) => (b.style.display = setupDone ? "" : "none"));
+  showTab(setupDone ? "activity" : "setup");
 }
 
 $("tabs").addEventListener("click", (e) => {
@@ -26,16 +27,31 @@ $("tabs").addEventListener("click", (e) => {
 
 function setStatus(el, text, kind) {
   el.textContent = text;
-  el.className = kind || "";
-  el.id === "statusSetup" && (el.className = "hint " + (kind || ""));
+  el.className = (el.id === "statusSetup" ? "hint " : "") + (kind || "");
 }
 
 // ---------------------------------------------------------------------
-// Load
+// State
 // ---------------------------------------------------------------------
+async function readState() {
+  const s = await chrome.storage.local.get([
+    "apiKey", "workspaceId", "persona", "tokenCap", "keyVerified", "tourDone",
+    "meVanity", "meName", "pendingIdentity", "history",
+  ]);
+  const history = s.history || [];
+  const steps = {
+    key: !!(s.apiKey && s.keyVerified),
+    me: !!s.meVanity,
+    post: history.some((h) => h.kind !== "reply"),
+    reply: history.some((h) => h.kind === "reply"),
+    vote: history.some((h) => h.votes && Object.keys(h.votes).length),
+  };
+  return { ...s, history, steps };
+}
+
 async function load() {
-  const s = await chrome.storage.local.get(["apiKey", "workspaceId", "persona", "tokenCap", "keyVerified"]);
-  verified = !!(s.apiKey && s.keyVerified);
+  const s = await readState();
+  setupDone = !!(s.steps.key && s.steps.me && s.tourDone);
   if (s.apiKey) {
     $("apiKey").value = s.apiKey;
     $("apiKeySetup").value = s.apiKey;
@@ -43,12 +59,42 @@ async function load() {
   if (s.workspaceId) $("workspaceId").value = s.workspaceId;
   if (s.persona) $("persona").value = s.persona;
   $("tokenCap").value = s.tokenCap || QC_DEFAULT_MONTHLY_TOKEN_CAP;
+  renderSteps(s);
   applyMode();
   refreshActivity();
 }
 
+function renderSteps(s) {
+  const mark = (id, done, n) => {
+    const el = $(id);
+    el.classList.toggle("step--done", done);
+    el.querySelector(".step__mark").textContent = done ? "✓" : String(n);
+  };
+  mark("st-key", s.steps.key, 1);
+  mark("st-me", s.steps.me, 2);
+  mark("st-post", s.steps.post, 3);
+  mark("st-reply", s.steps.reply, 4);
+  mark("st-vote", s.steps.vote, 5);
+
+  if (s.steps.me) $("meStatus").textContent = `You are ${s.meName || ""} (/in/${s.meVanity}).`;
+  else if (s.pendingIdentity && Date.now() - s.pendingIdentity < 5 * 60 * 1000) $("meStatus").textContent = "Waiting for your profile tab…";
+  else $("meStatus").textContent = "";
+  $("meLine").textContent = s.meVanity ? `${s.meName || ""} (/in/${s.meVanity})` : "Unknown. Run the walkthrough or click below.";
+
+  const n = s.history.filter((h) => h.kind !== "reply").length;
+  $("postStatus").textContent = n ? `${n} post generation${n === 1 ? "" : "s"} so far.` : "";
+  const r = s.history.filter((h) => h.kind === "reply").length;
+  $("replyStatus").textContent = r ? `${r} reply generation${r === 1 ? "" : "s"} so far.` : "";
+  const v = s.history.reduce((a, h) => a + (h.votes ? Object.keys(h.votes).length : 0), 0);
+  $("voteStatus").textContent = v ? `${v} vote${v === 1 ? "" : "s"} so far.` : "";
+
+  const ready = s.steps.key && s.steps.me;
+  $("finishSetup").disabled = !ready;
+  $("finishHint").textContent = ready ? "Steps 3 to 5 keep ticking off after you finish." : "Finish steps 1 and 2 to continue.";
+}
+
 async function refreshActivity() {
-  const res = await chrome.runtime.sendMessage({ type: "qc-usage" }).catch(() => null);
+  const res = await send({ type: "qc-usage" });
   const { history = [] } = await chrome.storage.local.get("history");
   const cap = Number($("tokenCap").value) || QC_DEFAULT_MONTHLY_TOKEN_CAP;
   const u = res?.usage || { tokens: 0, requests: 0, cost: 0, month: "" };
@@ -73,7 +119,7 @@ async function refreshActivity() {
   if (!history.length) {
     const e = document.createElement("div");
     e.className = "empty";
-    e.textContent = "No generations yet. Click \"Comment ideas\" under a LinkedIn post.";
+    e.textContent = "No generations yet. Click \"✦ Propose comment ideas\" under a LinkedIn post.";
     recent.appendChild(e);
     return;
   }
@@ -122,26 +168,44 @@ async function saveSettings() {
 
 async function testKey(statusEl) {
   setStatus(statusEl, "Testing…");
-  const res = await chrome.runtime.sendMessage({ type: "qc-test-key" }).catch((e) => ({ ok: false, error: String(e) }));
+  const res = await send({ type: "qc-test-key" });
   if (res?.ok) {
     setStatus(statusEl, `Key works. Model: ${res.model}`, "ok");
     await chrome.storage.local.set({ keyVerified: true });
-    verified = true;
   } else {
     setStatus(statusEl, res?.error || "No response.", "err");
     await chrome.storage.local.set({ keyVerified: false });
-    verified = false;
   }
+  renderSteps(await readState());
   refreshActivity();
-  return verified;
+}
+
+async function openMyProfile() {
+  await chrome.storage.local.set({ pendingIdentity: Date.now() });
+  $("meStatus").textContent = "Opening your profile in a new tab… come back here when you see the confirmation.";
+  await send({ type: "qc-open-url", url: "https://www.linkedin.com/in/me/" });
 }
 
 $("testSetup").addEventListener("click", async () => {
-  const apiKey = $("apiKeySetup").value.trim();
-  $("apiKey").value = apiKey;
+  $("apiKey").value = $("apiKeySetup").value.trim();
   await saveSettings();
-  const ok = await testKey($("statusSetup"));
-  if (ok) setTimeout(applyMode, 700);
+  await testKey($("statusSetup"));
+});
+$("openMe").addEventListener("click", openMyProfile);
+$("openMe2").addEventListener("click", openMyProfile);
+$("openFeed").addEventListener("click", () => send({ type: "qc-open-url", url: "https://www.linkedin.com/feed/" }));
+
+$("finishSetup").addEventListener("click", async () => {
+  await chrome.storage.local.set({ tourDone: true });
+  setupDone = true;
+  applyMode();
+});
+
+$("restartTour").addEventListener("click", async () => {
+  await chrome.storage.local.set({ tourDone: false });
+  setupDone = false;
+  renderSteps(await readState());
+  applyMode();
 });
 
 $("save").addEventListener("click", async () => {
@@ -149,26 +213,16 @@ $("save").addEventListener("click", async () => {
   setStatus($("status"), "Saved.", "ok");
   refreshActivity();
 });
-
 $("test").addEventListener("click", async () => {
   await saveSettings();
   await testKey($("status"));
 });
-
 $("reset").addEventListener("click", async () => {
   await chrome.storage.local.remove("usage");
   setStatus($("status"), "Counter reset.", "ok");
   refreshActivity();
 });
-
-$("openHistory").addEventListener("click", () => chrome.runtime.sendMessage({ type: "qc-open-history" }));
-
-chrome.storage.onChanged.addListener((changes) => {
-  if (changes.history || changes.totals || changes.usage) refreshActivity();
-});
-
-load();
-
+$("openHistory").addEventListener("click", () => send({ type: "qc-open-history" }));
 
 $("copyDiag").addEventListener("click", async () => {
   const { diag, diagAt } = await chrome.storage.local.get(["diag", "diagAt"]);
@@ -184,8 +238,15 @@ $("copyDiag").addEventListener("click", async () => {
   const age = Math.round((Date.now() - diagAt) / 1000);
   try {
     await navigator.clipboard.writeText(diag);
-    $("diagHint").textContent = `Copied (${age}s old). Paste it to Claude. It is also selected below: Cmd+C works too.`;
+    $("diagHint").textContent = `Copied (${age}s old). Also selected below.`;
   } catch {
-    $("diagHint").textContent = `Selected below (${age}s old). Press Cmd+C, then paste it to Claude.`;
+    $("diagHint").textContent = `Selected below (${age}s old). Press Cmd+C.`;
   }
 });
+
+chrome.storage.onChanged.addListener(async (changes) => {
+  if (changes.history || changes.totals || changes.usage) refreshActivity();
+  if (changes.meVanity || changes.meName || changes.history || changes.keyVerified || changes.pendingIdentity) renderSteps(await readState());
+});
+
+load();

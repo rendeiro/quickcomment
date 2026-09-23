@@ -313,3 +313,18 @@
   padding: 6px 0 8px;
 }
 .qc-root--reply .qc-panel { align-self: stretch; }
+
+.qc-toast {
+  position: fixed;
+  left: 50%;
+  top: 16px;
+  transform: translateX(-50%);
+  z-index: 2147483000;
+  padding: 12px 18px;
+  background: rgba(0, 0, 0, 0.92);
+  color: #fff;
+  border-radius: 999px;
+  font: 500 14px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+}
+.qc-toast .qc-trigger__spark { color: #1ec371; }

@@ -35,6 +35,12 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     markCopied(message.id, message.index).then(() => sendResponse({ ok: true }));
     return true;
   }
+  if (message?.type === "qc-open-url") {
+    const url = String(message.url || "");
+    if (/^https:\/\/www\.linkedin\.com\//.test(url)) chrome.tabs.create({ url });
+    sendResponse({ ok: true });
+    return false;
+  }
   if (message?.type === "qc-whoami") {
     fetch("https://www.linkedin.com/in/me/", { redirect: "follow", credentials: "include" })
       .then((res) => {

@@ -30,6 +30,23 @@ Personal tool, not on the Chrome Web Store. You bring your own Claude API key.
 5. The setup page opens by itself. Follow the three steps on it, or read
    the next section.
 
+## First run: the walkthrough
+
+The popup opens on a five-step Setup tab until you finish it:
+
+1. **Connect your Claude key.** Paste, Test key.
+2. **Tell it who you are.** One button opens your own LinkedIn profile in
+   a new tab (`/in/me/`, which LinkedIn redirects to you). The extension
+   reads your name and profile slug from that page and shows a
+   confirmation banner. This is how it knows when you are the author of
+   the post it is replying under.
+3. **Try it on a post.** Ticks itself off after your first generation.
+4. **Reply to a comment.** Ticks itself off after your first reply.
+5. **Teach it.** Ticks itself off after your first vote.
+
+Steps 1 and 2 are required for **Finish setup**. Settings has
+**Restart the walkthrough** and **Re-detect from my profile**.
+
 ## Get a Claude API key (about 3 minutes)
 
 1. Go to <https://platform.claude.com/settings/keys> and sign in or create
@@ -63,10 +80,9 @@ the speech bubble. When the reply box opens, a **✦ Propose reply ideas**
 pill appears right under it. Click it. Three replies, votes, Regenerate
 and Copy, same as for posts.
 
-It knows who you are: LinkedIn redirects `/in/me/` to your profile, so the
-extension reads your profile slug once a day and compares it with the post
-author's. On your own posts it replies as the author; elsewhere as a
-reader. The footer says which. The whole thread under that top-level
+It knows who you are from the walkthrough's profile step and compares
+your profile slug with the post author's. On your own posts it replies as
+the author; elsewhere as a reader. The footer says which. The whole thread under that top-level
 comment goes along as context, oldest first, with your own earlier replies
 marked, so follow-ups continue the conversation instead of restarting it.
 

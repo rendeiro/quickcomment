@@ -9,40 +9,51 @@
       --wash: #f3f2ef; --paper: #ffffff; --star: #1ec371; --danger: #cc1016;
     }
     * { box-sizing: border-box; }
-    body { font: 14px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; margin: 0; width: 420px; color: var(--ink); background: var(--paper); }
+    body { font: 14px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; margin: 0; width: 440px; color: var(--ink); background: var(--paper); }
     header { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px 8px; border-bottom: 1px solid var(--line-soft); }
     h1 { font-size: 16px; margin: 0; display: flex; align-items: center; gap: 6px; }
-    h1 .spark { color: var(--star); }
+    .spark { color: var(--star); }
     nav { display: flex; gap: 6px; }
     nav button { font: inherit; font-weight: 600; padding: 4px 12px; border-radius: 999px; border: 1px solid var(--ink-soft); background: transparent; color: var(--ink-soft); cursor: pointer; }
     nav button:hover { color: var(--ink); border-color: var(--ink); box-shadow: inset 0 0 0 1px var(--ink); }
     nav button.on { color: #fff; background: var(--ink); border-color: var(--ink); box-shadow: none; }
-    section { display: none; padding: 8px 16px 16px; max-height: 520px; overflow: auto; }
+    section { display: none; padding: 8px 16px 16px; max-height: 560px; overflow: auto; }
     section.on { display: block; }
     label { display: block; font-weight: 600; margin: 12px 0 4px; font-size: 13px; }
     input, textarea { width: 100%; padding: 7px 10px; border: 1px solid var(--line); border-radius: 4px; font: inherit; background: var(--paper); color: var(--ink); }
     input:focus, textarea:focus { outline: none; border-color: var(--ink); box-shadow: inset 0 0 0 1px var(--ink); }
     textarea { min-height: 64px; resize: vertical; }
     .hint { font-size: 12px; color: var(--ink-soft); margin-top: 4px; }
-    .row { display: flex; gap: 8px; margin-top: 14px; align-items: center; flex-wrap: wrap; }
+    .row { display: flex; gap: 8px; margin-top: 10px; align-items: center; flex-wrap: wrap; }
     .btn { font: inherit; font-weight: 600; padding: 6px 14px; border-radius: 999px; border: 1px solid var(--ink-soft); background: transparent; color: var(--ink-soft); cursor: pointer; }
     .btn:hover { color: var(--ink); border-color: var(--ink); box-shadow: inset 0 0 0 1px var(--ink); }
     .btn--primary { background: var(--ink); border-color: var(--ink); color: #fff; }
     .btn--primary:hover { background: #000; box-shadow: none; }
+    .btn--primary:disabled { opacity: 0.4; cursor: default; box-shadow: none; background: var(--ink); }
     .btn--danger { color: var(--danger); border-color: var(--danger); }
     #status { font-size: 12px; margin-top: 10px; min-height: 16px; }
     .ok { color: var(--ink); }
     .err { color: var(--danger); }
     a { color: var(--ink); }
     code { font-size: 12px; background: var(--wash); padding: 1px 5px; border-radius: 3px; }
-    .card { border: 1px solid var(--line-soft); border-radius: 8px; padding: 12px 14px; background: var(--wash); }
-    .card ol { margin: 6px 0 0; padding-left: 18px; }
-    .card li { margin: 5px 0; }
+    /* onboarding steps */
+    .intro { color: var(--ink-soft); margin: 4px 0 10px; }
+    .steps { list-style: none; margin: 0; padding: 0; }
+    .step { border: 1px solid var(--line-soft); border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; background: var(--wash); }
+    .step__head { display: flex; align-items: center; gap: 8px; }
+    .step__mark { flex: 0 0 auto; width: 20px; height: 20px; border-radius: 50%; border: 1px solid var(--ink-soft); display: inline-flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; color: var(--ink-soft); }
+    .step--done .step__mark { background: var(--ink); border-color: var(--ink); color: var(--star); }
+    .step--done .step__head b { color: var(--ink-soft); }
+    .step__body { margin-top: 6px; font-size: 13px; color: var(--ink-soft); }
+    .step__body b { color: var(--ink); }
+    .step--done .step__body { display: none; }
+    .step__status { display: block; margin-top: 6px; font-size: 12px; color: var(--ink); }
+    /* activity */
     .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 4px; }
     .stat { border: 1px solid var(--line-soft); border-radius: 8px; padding: 8px 12px; background: var(--wash); }
     .stat b { display: block; font-size: 18px; }
     .stat span { font-size: 11px; color: var(--ink-soft); }
-    .stat .spark { color: var(--star); font-size: 12px; }
+    .stat .spark { font-size: 12px; }
     .meter { height: 4px; border-radius: 999px; background: var(--line-soft); margin-top: 8px; overflow: hidden; }
     .meter i { display: block; height: 100%; background: var(--ink); width: 0; }
     .recent { margin-top: 14px; }
@@ -67,21 +78,46 @@
   </header>
 
   <section id="tab-setup">
-    <div class="card">
-      <b>First-time setup, about 3 minutes</b>
-      <ol>
-        <li>Open <a href="https://platform.claude.com/settings/keys" target="_blank" rel="noopener">platform.claude.com/settings/keys</a>, click <b>Create key</b>.</li>
-        <li>Name it <code>quickcomment</code>. Expiration 30 days. Linked account: you. Workspace: one specific workspace.</li>
-        <li>Paste the key below and click <b>Test key</b>.</li>
-      </ol>
-    </div>
-    <label for="apiKeySetup">Anthropic API key</label>
-    <input id="apiKeySetup" type="password" autocomplete="off" placeholder="sk-ant-api03-…">
-    <div class="hint">Stored only in this browser's extension storage. Never written to a file.</div>
-    <div class="row">
-      <button id="testSetup" class="btn btn--primary">Test key</button>
-    </div>
-    <div id="statusSetup" class="status"></div>
+    <div class="intro">Five steps. The first two are required; the rest tick themselves off as you use it.</div>
+    <ol class="steps">
+      <li class="step" id="st-key">
+        <div class="step__head"><span class="step__mark">1</span><b>Connect your Claude key</b></div>
+        <div class="step__body">
+          Open <a href="https://platform.claude.com/settings/keys" target="_blank" rel="noopener">platform.claude.com/settings/keys</a>, click <b>Create key</b>. Name it <code>quickcomment</code>, expiration 30 days, linked account you, one workspace. Copy it and paste it here.
+          <input id="apiKeySetup" type="password" autocomplete="off" placeholder="sk-ant-api03-…" style="margin-top:8px">
+          <div class="row"><button id="testSetup" class="btn btn--primary">Test key</button><span id="statusSetup" class="hint"></span></div>
+        </div>
+      </li>
+      <li class="step" id="st-me">
+        <div class="step__head"><span class="step__mark">2</span><b>Tell it who you are</b></div>
+        <div class="step__body">
+          Needed so it knows when <b>you</b> wrote the post it is replying under. Click the button: your own LinkedIn profile opens in a new tab, the extension reads your name from it and shows a confirmation at the top of that page. Then come back here.
+          <div class="row"><button id="openMe" class="btn btn--primary">Open my profile</button><span id="meStatus" class="hint"></span></div>
+        </div>
+      </li>
+      <li class="step" id="st-post">
+        <div class="step__head"><span class="step__mark">3</span><b>Try it on a post</b></div>
+        <div class="step__body">
+          Under any post's Like / Comment / Repost row there is a <b>✦ Propose comment ideas</b> pill, right-aligned. Click it. It reads the post, then writes three options. <b>Copy</b> the one you like.
+          <div class="row"><button id="openFeed" class="btn">Open the feed</button><span id="postStatus" class="hint"></span></div>
+        </div>
+      </li>
+      <li class="step" id="st-reply">
+        <div class="step__head"><span class="step__mark">4</span><b>Reply to a comment</b></div>
+        <div class="step__body">
+          Under a comment, click LinkedIn's speech-bubble reply icon. A <b>✦ Propose reply ideas</b> pill appears under the reply box. Click it. The footer tells you whether it answered as the post's author or as a reader, and the whole thread goes along as context.
+          <span id="replyStatus" class="step__status"></span>
+        </div>
+      </li>
+      <li class="step" id="st-vote">
+        <div class="step__head"><span class="step__mark">5</span><b>Teach it</b></div>
+        <div class="step__body">
+          <b>▲</b> and <b>▼</b> on any option, then <b>Regenerate</b>: it keeps what you liked, drops what you did not, and remembers across posts. <b>Options</b> in the footer holds size, attitude and style.
+          <span id="voteStatus" class="step__status"></span>
+        </div>
+      </li>
+    </ol>
+    <div class="row"><button id="finishSetup" class="btn btn--primary" disabled>Finish setup</button><span class="hint" id="finishHint"></span></div>
   </section>
 
   <section id="tab-activity">
@@ -101,6 +137,10 @@
   </section>
 
   <section id="tab-settings">
+    <label>You</label>
+    <div class="hint" id="meLine">Unknown.</div>
+    <div class="row" style="margin-top:6px"><button id="openMe2" class="btn">Re-detect from my profile</button></div>
+
     <label for="apiKey">Anthropic API key</label>
     <input id="apiKey" type="password" autocomplete="off" placeholder="sk-ant-api03-…">
     <div class="hint"><a href="https://platform.claude.com/settings/keys" target="_blank" rel="noopener">Manage keys</a></div>
@@ -111,7 +151,7 @@
 
     <label for="persona">About you (optional)</label>
     <textarea id="persona" placeholder="e.g. Product manager in Porto, teaches a PM program, writes about AI tooling."></textarea>
-    <div class="hint">Used for the second option only, when it makes the comment more specific.</div>
+    <div class="hint">Used for the option that brings your own side, when it makes the comment more specific.</div>
 
     <label for="tokenCap">Monthly token cap</label>
     <input id="tokenCap" type="number" min="1000" step="1000">
@@ -123,6 +163,9 @@
       <button id="reset" class="btn btn--danger">Reset counter</button>
     </div>
     <div id="status"></div>
+
+    <label>Onboarding</label>
+    <div class="row" style="margin-top:4px"><button id="restartTour" class="btn">Restart the walkthrough</button></div>
 
     <label>Debug</label>
     <div class="row" style="margin-top:4px">

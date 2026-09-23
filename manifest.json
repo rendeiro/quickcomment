@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "QuickComment",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "Generates 3 short comment options for any LinkedIn post, with knobs for size, attitude and style. Powered by Claude.",
   "icons": {
     "16": "icons/icon16.png",
@@ -27,7 +27,8 @@
       "matches": [
         "https://www.linkedin.com/feed/*",
         "https://www.linkedin.com/feed",
-        "https://www.linkedin.com/posts/*"
+        "https://www.linkedin.com/posts/*",
+        "https://www.linkedin.com/in/*"
       ],
       "js": ["config.js", "content.js"],
       "css": ["styles.css"],
