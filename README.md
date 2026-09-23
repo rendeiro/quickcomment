@@ -66,13 +66,14 @@ platform.claude.com, then paste the new one under the popup's Settings tab.
 
 ## Cost
 
-- Model: Claude Opus 5 at low effort, thinking switched off.
-  $5 per million input tokens, $25 per million output. Sonnet 5 is the
-  cheap alternative at $2 / $10, about a third of the cost.
-- A generation is about 1,100 tokens, roughly $0.01.
-- Output is capped at 640 tokens per request. Posts are trimmed to 2,500
-  characters before sending.
-- A monthly token cap (default 300,000, about 270 generations, roughly $3)
+- Model: Claude Opus 5.5 at low effort. Thinking is always on for this
+  model; low effort keeps it short. $4 per million input tokens, $20 per
+  million output. Sonnet 5 is the cheap alternative at $2 / $10.
+- A generation is about 1,200 tokens including a little thinking, roughly
+  $0.01.
+- Output is capped at 2,048 tokens per request (thinking counts against
+  it). Posts are trimmed to 2,500 characters before sending.
+- A monthly token cap (default 300,000, about 250 generations, roughly $3)
   stops generation when reached. Change it or reset the counter in the
   popup's Settings tab.
 
@@ -123,8 +124,8 @@ Things you will probably want to change:
   the prompt pick it up. Nothing else changes.
 - **Model**: `QC_MODEL` in `config.js`. Update the prices next to it so the
   cost tracking stays right. Sonnet 5 works as a drop-in. Models without an
-  `effort` parameter (Haiku 4.5) need the `output_config.effort` and
-  `thinking` lines in `callClaude()` removed.
+  `effort` parameter (Haiku 4.5) need the `output_config.effort` line in
+  `callClaude()` removed.
 
 Build a release zip:
 

@@ -8,25 +8,28 @@
 const QC_API = {
   ENDPOINT: "https://api.anthropic.com/v1/messages",
   VERSION: "2023-06-01",
-  // Hard per-request output ceiling. The read block plus three comments as
-  // JSON fit in ~400 tokens; 640 leaves headroom.
-  MAX_TOKENS: 640,
+  // Per-request output ceiling. The read block plus three comments as JSON
+  // fit in ~400 tokens, but on Opus 5.5 adaptive thinking also counts
+  // against this, so leave room. Cost stays capped by the number itself.
+  MAX_TOKENS: 2048,
   // Posts longer than this are trimmed before being sent (roughly 600
   // tokens). Long posts rarely need more than their opening to comment on.
   MAX_POST_CHARS: 2500,
 };
 
-// The model. Opus 5 at low effort with thinking switched off: same price as
-// Opus 4.8, newer, and with thinking off the output stays tiny and quick.
+// The model. Opus 5.5 (released 2026-09-22) at low effort. Thinking is
+// always on for this model and cannot be disabled; at low effort it stays
+// small. Thinking tokens bill as output, so max_tokens must leave room.
 // Sonnet 5 ($2 in / $10 out) is the cheap alternative: swap the id and the
 // two prices. Prices are USD per million tokens, list price, September 2026.
-const QC_MODEL = { id: "claude-opus-5", inputPerM: 5.0, outputPerM: 25.0, effort: "low" };
+const QC_MODEL = { id: "claude-opus-5-5", inputPerM: 4.0, outputPerM: 20.0, effort: "low" };
 
 // Spend guard. Every request's input + output tokens are added to a counter
 // in chrome.storage.local, keyed by calendar month. When the counter reaches
 // the cap, generation stops until next month or until you raise the cap or
-// reset the counter in the options page. A generation is ~1,100 tokens,
-// about $0.01. 300k tokens is ~270 generations, roughly $3.
+// reset the counter in the options page. A generation is ~1,200 tokens
+// including a little thinking, about $0.01. 300k tokens is ~250
+// generations, roughly $3.
 const QC_DEFAULT_MONTHLY_TOKEN_CAP = 300000;
 
 // How many past generations to keep. Oldest are dropped beyond this.

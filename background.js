@@ -56,7 +56,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
           system: "Reply with the single word OK.",
           user: "Ping.",
           schema: null,
-          maxTokens: 16,
+          maxTokens: 256,
         });
         sendResponse({ ok: true, model: data.model });
         return;
@@ -358,12 +358,11 @@ async function callClaude(settings, { system, user, schema, maxTokens }) {
   };
   if (settings.workspaceId) headers["anthropic-workspace-id"] = settings.workspaceId;
 
-  // Opus 5 thinks by default. Switch it off (allowed at effort "low") so
-  // no reasoning tokens are billed and max_tokens is all for the answer.
+  // Opus 5.5: adaptive thinking is always on and cannot be disabled.
+  // Effort "low" keeps it short. Do not send a `thinking` field.
   const body = {
     model: QC_MODEL.id,
     max_tokens: maxTokens,
-    thinking: { type: "disabled" },
     system,
     messages: [{ role: "user", content: user }],
     output_config: { effort: QC_MODEL.effort },
