@@ -277,7 +277,7 @@
     // discussed. Changes the register a lot, so it sits in the footer.
     let asAuthor = false;
     if (opts?.mode === "reply") {
-      asAuthor = !!replyAsAuthorDefault;
+      asAuthor = opts.asAuthorDefault != null ? !!opts.asAuthorDefault : !!replyAsAuthorDefault;
       const pill = document.createElement("button");
       pill.type = "button";
       pill.className = "qc-pill" + (asAuthor ? " qc-pill--on" : "");
@@ -356,7 +356,7 @@
       type: "qc-generate",
       post,
       author,
-      reply,
+      reply: reply ? { text: reply.text, author: reply.author, byPostAuthor: !!reply.byPostAuthor } : null,
       asAuthor: isReply ? !!ui.asAuthor() : false,
       knobs: { ...knobs },
       feedback,
@@ -453,6 +453,174 @@
     side.append(votes, copy);
     item.append(body, side);
     return item;
+  }
+
+  // ------------------------------------------------------------------
+  // Reply ideas, shown only once the user opens LinkedIn's reply box.
+  // Anchors verified on a live post page:
+  //   button[aria-label="Reply"] with no text      -> the speech-bubble icon
+  //   a [contenteditable] whose box holds a button  -> the reply editor
+  //     with the text "Reply"                          (the main comment box
+  //                                                     says "Comment")
+  //   button[aria-label^="View more options for "]  -> "…for <Name>’s comment."
+  //   a leaf element with text "Author"             -> commenter wrote the post
+  //   name and headline sit inside <a href="/in/…">; the comment body is
+  //   the longest text outside links, buttons and editors.
+  // A comment's container is the largest ancestor holding exactly one
+  // reply icon, which excludes nested replies below it.
+  // ------------------------------------------------------------------
+  const REPLY_EDITOR_WIRED = "data-qc-reply-editor";
+  let yourName = "";
+  chrome.storage.local.get("yourName").then((s) => {
+    yourName = (s && s.yourName ? String(s.yourName) : "").trim();
+  });
+
+  function isReplyIcon(b) {
+    return b.getAttribute("aria-label") === "Reply" && (b.textContent || "").trim() === "";
+  }
+  function replyIconsIn(el) {
+    return Array.from(el.querySelectorAll('button[aria-label="Reply"]')).filter(isReplyIcon);
+  }
+
+  function commentContainerOf(replyIcon) {
+    let cand = replyIcon;
+    let up = replyIcon.parentElement;
+    while (up && up !== document.body && replyIconsIn(up).length === 1) {
+      cand = up;
+      up = up.parentElement;
+    }
+    return cand === replyIcon ? null : cand;
+  }
+
+  function commentAuthor(container) {
+    const btn = container.querySelector('button[aria-label^="View more options for "]');
+    if (!btn) return "";
+    const m = btn.getAttribute("aria-label").match(/^View more options for (.+?)[’']s comment/i);
+    return m ? m[1].trim() : "";
+  }
+
+  function commentIsByPostAuthor(container) {
+    return Array.from(container.querySelectorAll("span, div")).some(
+      (e) => e.children.length === 0 && /^author$/i.test((e.textContent || "").trim())
+    );
+  }
+
+  function commentText(container) {
+    const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
+    let best = null;
+    let node;
+    while ((node = walker.nextNode())) {
+      const t = node.nodeValue.replace(/\s+/g, " ").trim();
+      if (t.length < 8) continue;
+      const el = node.parentElement;
+      if (!el || el.closest("a, button, time, .qc-root, [contenteditable]")) continue;
+      if (!best || t.length > best.t.length) best = { t, el };
+    }
+    if (!best) return "";
+    // Widen to the body element: climb while the parent adds only body
+    // text (mentions are short links), stopping before the header link or
+    // the action row.
+    let body = best.el;
+    while (body.parentElement && body.parentElement !== container) {
+      const parent = body.parentElement;
+      if (parent.querySelector('button[aria-label="Reply"], [contenteditable]')) break;
+      const links = Array.from(parent.querySelectorAll('a[href*="/in/"], a[href*="/company/"]'));
+      const onlyMentions = links.every((a) => (a.textContent || "").trim().length < 40);
+      if (!onlyMentions) break;
+      body = parent;
+    }
+    return (body.textContent || "").replace(/\s+/g, " ").trim();
+  }
+
+  // The reply editor's box: the nearest ancestor of the editor that holds
+  // the submit button whose text is "Reply".
+  function replyBoxOf(editor) {
+    let box = editor.parentElement;
+    for (let i = 0; i < 8 && box && box !== document.body; i += 1) {
+      const submit = Array.from(box.querySelectorAll("button")).find((b) => /^reply$/i.test((b.textContent || "").trim()));
+      if (submit) return box;
+      box = box.parentElement;
+    }
+    return null;
+  }
+
+  // The comment the reply box belongs to: climb to the first ancestor
+  // holding reply icons; with one icon that ancestor is (inside) the
+  // comment, with several pick the icon sitting nearest above the box.
+  function commentForBox(box) {
+    let el = box.parentElement;
+    while (el && el !== document.body && replyIconsIn(el).length === 0) el = el.parentElement;
+    if (!el || el === document.body) return null;
+    const icons = replyIconsIn(el);
+    if (icons.length === 1) return commentContainerOf(icons[0]);
+    const top = box.getBoundingClientRect().top;
+    const above = icons.filter((b) => b.getBoundingClientRect().bottom <= top + 2);
+    const icon = above.length ? above[above.length - 1] : icons[0];
+    return commentContainerOf(icon);
+  }
+
+  const replyRoots = []; // [{ root, box }] so we can drop panels whose box closed
+  function wireReplyEditors() {
+    document.querySelectorAll('[contenteditable="true"]').forEach((editor) => {
+      if (editor.hasAttribute(REPLY_EDITOR_WIRED) || editor.closest(".qc-root")) return;
+      const box = replyBoxOf(editor);
+      if (!box) return; // main comment box, or not a reply editor
+      const container = commentForBox(box);
+      if (!container) return;
+      editor.setAttribute(REPLY_EDITOR_WIRED, "1");
+
+      const root = document.createElement("div");
+      root.className = "qc-root qc-root--reply";
+      const trigger = document.createElement("button");
+      trigger.type = "button";
+      trigger.className = "qc-trigger";
+      trigger.innerHTML = '<span class="qc-trigger__spark">✦</span> Propose reply ideas';
+      trigger.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        toggleReplyPanel(root, container, trigger);
+      });
+      root.appendChild(trigger);
+      box.insertAdjacentElement("afterend", root);
+      replyRoots.push({ root, box });
+      console.log("[QuickComment] reply box wired for", commentAuthor(container) || "unknown commenter");
+    });
+    // Drop panels whose reply box has been closed.
+    for (let i = replyRoots.length - 1; i >= 0; i -= 1) {
+      if (!document.contains(replyRoots[i].box)) {
+        replyRoots[i].root.remove();
+        replyRoots.splice(i, 1);
+      }
+    }
+  }
+
+  async function toggleReplyPanel(root, container, trigger) {
+    const existing = root.querySelector(".qc-panel");
+    if (existing) {
+      existing.remove();
+      trigger.classList.remove("qc-trigger--open");
+      return;
+    }
+    trigger.classList.add("qc-trigger--open");
+    const res = await send({ type: "qc-has-key" });
+    if (!res.ok) {
+      root.appendChild(buildNotePanel(res.error));
+      return;
+    }
+    if (!res.hasKey) {
+      root.appendChild(buildSetupPanel());
+      return;
+    }
+    const ctx = postContextFor(container, container.getBoundingClientRect());
+    const target = {
+      text: commentText(container),
+      author: commentAuthor(container),
+      byPostAuthor: commentIsByPostAuthor(container),
+    };
+    const authorDefault = yourName && ctx.author && ctx.author.toLowerCase() === yourName.toLowerCase();
+    const panel = buildPanel(null, { mode: "reply", ctx, target, asAuthorDefault: authorDefault });
+    root.appendChild(panel);
+    panel.qcGenerate();
   }
 
   // ------------------------------------------------------------------
@@ -629,6 +797,7 @@
     const cards = findPosts(document);
     let wired = 0;
     cards.forEach((c) => { if (wire(c)) wired += 1; });
+    try { wireReplyEditors(); } catch (err) { console.log("[QuickComment] reply wiring error", err); }
     const total = document.querySelectorAll(`[${WIRED_ATTR}="1"]`).length;
     const report = `${cards.length} pending, ${total} wired`;
     if (report !== lastReport) {
@@ -734,7 +903,7 @@
       return;
     }
     try { commentDiag(); } catch (err) { console.log("[QuickComment] diag error", err); }
-  }, 15000);
+  }, 30000);
   scan();
   [800, 2000, 4000].forEach((ms) => setTimeout(scan, ms));
   setTimeout(diagnostics, 5000);

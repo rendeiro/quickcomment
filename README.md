@@ -58,13 +58,13 @@ platform.claude.com, then paste the new one under the popup's Settings tab.
 4. **Copy** the one you like, click LinkedIn's Comment, paste.
 5. **Options** (collapsed under the footer) holds the knobs. They stick.
 
-**Replying to a comment:** highlight the comment's text with the mouse. A
-black **✦ Reply ideas** bubble appears above the selection. Click it. A
-panel opens under the comment with three replies, votes, Regenerate and
-Copy, same as for posts. The **I wrote the post** pill in the footer
-switches the register to answering as the author; it remembers your last
-choice. Escape or × closes the panel. This works on anything you can
-select, so it also works on replies to replies.
+**Replying to a comment:** click LinkedIn's reply icon under a comment,
+the speech bubble. When the reply box opens, a **✦ Propose reply ideas**
+pill appears right under it. Click it. Three replies, votes, Regenerate
+and Copy, same as for posts. The **I wrote the post** pill in the footer
+switches the register to answering as the author. Put your name in
+Settings and it switches itself on for your own posts. Second path:
+highlight any text and click the black **✦ Reply ideas** bubble.
 
 | Knob | Options |
 | --- | --- |

@@ -303,3 +303,10 @@
   font-size: 13px;
   color: var(--qc-ink-soft);
 }
+
+/* Reply-box trigger: under LinkedIn's reply editor, left-aligned */
+.qc-root--reply {
+  align-items: flex-start;
+  padding: 6px 0 8px;
+}
+.qc-root--reply .qc-panel { align-self: stretch; }

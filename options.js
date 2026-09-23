@@ -34,7 +34,7 @@ function setStatus(el, text, kind) {
 // Load
 // ---------------------------------------------------------------------
 async function load() {
-  const s = await chrome.storage.local.get(["apiKey", "workspaceId", "persona", "tokenCap", "keyVerified"]);
+  const s = await chrome.storage.local.get(["apiKey", "workspaceId", "persona", "tokenCap", "keyVerified", "yourName"]);
   verified = !!(s.apiKey && s.keyVerified);
   if (s.apiKey) {
     $("apiKey").value = s.apiKey;
@@ -42,6 +42,7 @@ async function load() {
   }
   if (s.workspaceId) $("workspaceId").value = s.workspaceId;
   if (s.persona) $("persona").value = s.persona;
+  if (s.yourName) $("yourName").value = s.yourName;
   $("tokenCap").value = s.tokenCap || QC_DEFAULT_MONTHLY_TOKEN_CAP;
   applyMode();
   refreshActivity();
@@ -114,9 +115,10 @@ async function saveSettings() {
   const apiKey = $("apiKey").value.trim();
   const workspaceId = $("workspaceId").value.trim();
   const persona = $("persona").value.trim();
+  const yourName = $("yourName").value.trim();
   const tokenCap = Math.max(1000, Number($("tokenCap").value) || QC_DEFAULT_MONTHLY_TOKEN_CAP);
   $("tokenCap").value = tokenCap;
-  await chrome.storage.local.set({ apiKey, workspaceId, persona, tokenCap });
+  await chrome.storage.local.set({ apiKey, workspaceId, persona, tokenCap, yourName });
   $("apiKeySetup").value = apiKey;
 }
 

@@ -64,7 +64,9 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
       const { author, knobs } = message;
       const post = trimPost(message.post);
-      const reply = message.reply ? { text: String(message.reply.text || "").slice(0, 2000), author: String(message.reply.author || "").slice(0, 80) } : null;
+      const reply = message.reply
+        ? { text: String(message.reply.text || "").slice(0, 2000), author: String(message.reply.author || "").slice(0, 80), byPostAuthor: !!message.reply.byPostAuthor }
+        : null;
       const taste = await recentTaste(hashText(reply ? reply.text : post));
       const prompt = buildPrompt({
         post,
@@ -373,7 +375,7 @@ function buildPrompt({ post, author, reply = null, asAuthor = false, knobs, pers
     ...(reply
       ? [
           "",
-          `Comment to reply to, by ${reply.author || "unknown commenter"}:`,
+          `Comment to reply to, by ${reply.author || "unknown commenter"}${reply.byPostAuthor ? " (who wrote the post)" : ""}:`,
           "<comment>",
           reply.text,
           "</comment>",
