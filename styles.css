@@ -153,6 +153,8 @@
 .qc-knobs { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--qc-line-soft); }
 .qc-knobs[hidden] { display: none; }
 .qc-status { font-size: 13px; color: var(--qc-ink-soft); }
+.qc-role { font-size: 12px; color: var(--qc-ink-soft); }
+.qc-role::before { content: "✦ "; color: var(--qc-star); }
 .qc-status--error { color: var(--qc-danger); }
 
 .qc-results {

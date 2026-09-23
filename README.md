@@ -61,10 +61,17 @@ platform.claude.com, then paste the new one under the popup's Settings tab.
 **Replying to a comment:** click LinkedIn's reply icon under a comment,
 the speech bubble. When the reply box opens, a **✦ Propose reply ideas**
 pill appears right under it. Click it. Three replies, votes, Regenerate
-and Copy, same as for posts. The **I wrote the post** pill in the footer
-switches the register to answering as the author. Put your name in
-Settings and it switches itself on for your own posts. Second path:
-highlight any text and click the black **✦ Reply ideas** bubble.
+and Copy, same as for posts.
+
+It knows who you are: LinkedIn redirects `/in/me/` to your profile, so the
+extension reads your profile slug once a day and compares it with the post
+author's. On your own posts it replies as the author; elsewhere as a
+reader. The footer says which. The whole thread under that top-level
+comment goes along as context, oldest first, with your own earlier replies
+marked, so follow-ups continue the conversation instead of restarting it.
+
+Works on the feed as well as on single post pages. Second path: highlight
+any text and click the black **✦ Reply ideas** bubble.
 
 | Knob | Options |
 | --- | --- |

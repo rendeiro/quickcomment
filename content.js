@@ -42,11 +42,6 @@
     }
   }
 
-  let replyAsAuthorDefault = false;
-  chrome.storage.local.get("replyAsAuthor").then((s) => {
-    replyAsAuthorDefault = !!(s && s.replyAsAuthor);
-  });
-
   let knobs = { ...QC_DEFAULT_KNOBS };
   chrome.storage.local.get("knobs").then((s) => {
     if (!s || !s.knobs) return;
@@ -273,22 +268,14 @@
     status.className = "qc-status";
     footer.append(go, optionsBtn);
 
-    // Reply mode: a pill that says whether the user wrote the post being
-    // discussed. Changes the register a lot, so it sits in the footer.
-    let asAuthor = false;
+    // Reply mode: say which register was picked. Decided automatically from
+    // the post author's profile link against the user's own.
     if (opts?.mode === "reply") {
-      asAuthor = opts.asAuthorDefault != null ? !!opts.asAuthorDefault : !!replyAsAuthorDefault;
-      const pill = document.createElement("button");
-      pill.type = "button";
-      pill.className = "qc-pill" + (asAuthor ? " qc-pill--on" : "");
-      pill.textContent = "I wrote the post";
-      pill.addEventListener("click", () => {
-        asAuthor = !asAuthor;
-        replyAsAuthorDefault = asAuthor;
-        pill.classList.toggle("qc-pill--on", asAuthor);
-        if (alive()) chrome.storage.local.set({ replyAsAuthor: asAuthor });
-      });
-      footer.appendChild(pill);
+      const role = document.createElement("span");
+      role.className = "qc-role";
+      const who = opts.target?.author ? ` to ${opts.target.author}` : "";
+      role.textContent = opts.asAuthor ? `Replying${who} as the post's author` : `Replying${who} as a reader`;
+      footer.appendChild(role);
     }
     footer.appendChild(status);
 
@@ -303,7 +290,7 @@
 
     panel.append(results, footer, knobsWrap);
 
-    panel.qcGenerate = () => generate(card, opts, { go, status, results, rounds, asAuthor: () => asAuthor });
+    panel.qcGenerate = () => generate(card, opts, { go, status, results, rounds });
     go.addEventListener("click", panel.qcGenerate);
     return panel;
   }
@@ -357,7 +344,8 @@
       post,
       author,
       reply: reply ? { text: reply.text, author: reply.author, byPostAuthor: !!reply.byPostAuthor } : null,
-      asAuthor: isReply ? !!ui.asAuthor() : false,
+      thread: isReply ? (opts.thread || []).map((t) => ({ author: t.author, text: t.text, byPostAuthor: !!t.byPostAuthor, isMe: !!t.isMe, isTarget: !!t.isTarget })) : [],
+      asAuthor: isReply ? !!opts.asAuthor : false,
       knobs: { ...knobs },
       feedback,
     });
@@ -470,10 +458,86 @@
   // reply icon, which excludes nested replies below it.
   // ------------------------------------------------------------------
   const REPLY_EDITOR_WIRED = "data-qc-reply-editor";
-  let yourName = "";
-  chrome.storage.local.get("yourName").then((s) => {
-    yourName = (s && s.yourName ? String(s.yourName) : "").trim();
-  });
+
+  // Who is the user? LinkedIn redirects /in/me/ to the user's own profile,
+  // so one same-origin fetch yields the profile slug ("rendeiro"). Cached
+  // for a day. Used to tell "you wrote this post" and "this reply is yours".
+  let meVanity = "";
+  function vanityFromHref(href) {
+    const m = String(href || "").match(/\/in\/([^/?#]+)/);
+    return m ? decodeURIComponent(m[1]).toLowerCase() : "";
+  }
+  async function loadMe() {
+    try {
+      const s = await chrome.storage.local.get(["meVanity", "meAt"]);
+      if (s && s.meVanity && Date.now() - (s.meAt || 0) < 86400000) {
+        meVanity = s.meVanity;
+        return;
+      }
+    } catch {}
+    try {
+      const res = await fetch("https://www.linkedin.com/in/me/", { redirect: "follow", credentials: "include" });
+      const v = vanityFromHref(res.url);
+      if (v && v !== "me") {
+        meVanity = v;
+        if (alive()) chrome.storage.local.set({ meVanity: v, meAt: Date.now() });
+        console.log("[QuickComment] you are /in/" + v);
+      }
+    } catch (err) {
+      console.log("[QuickComment] could not resolve /in/me/", err);
+    }
+  }
+  loadMe();
+
+  function postVanityFor(container, ctxCard) {
+    if (ctxCard) {
+      const name = getAuthor(ctxCard);
+      const actor = name ? getActorBlock(ctxCard, name) : null;
+      const link = actor ? actor.querySelector('a[href*="/in/"], a[href*="/company/"]') : null;
+      const v = link ? vanityFromHref(link.getAttribute("href")) : "";
+      if (v) return v;
+    }
+    const m = location.pathname.match(/^\/posts\/([^_/]+)_/);
+    return m ? decodeURIComponent(m[1]).toLowerCase() : "";
+  }
+
+  function commentVanity(container) {
+    const link = container.querySelector('a[href*="/in/"]');
+    return link ? vanityFromHref(link.getAttribute("href")) : "";
+  }
+
+  // The thread a comment belongs to. LinkedIn nests one level: a top-level
+  // comment followed by its replies, indented further right. Returns the
+  // top-level comment plus every reply under it, in order.
+  function threadFor(container) {
+    const all = replyIconsIn(document).map(commentContainerOf).filter(Boolean);
+    const idx = all.indexOf(container);
+    if (idx < 0) return [container];
+    const left = (c) => Math.round(c.getBoundingClientRect().left);
+    const L = left(container);
+    let start = idx;
+    for (let i = idx - 1; i >= 0; i -= 1) {
+      if (left(all[i]) < L) { start = i; break; }
+    }
+    const base = left(all[start]);
+    const out = [all[start]];
+    for (let i = start + 1; i < all.length; i += 1) {
+      if (left(all[i]) <= base) break;
+      out.push(all[i]);
+    }
+    return out;
+  }
+
+  function describeComment(c, target) {
+    const v = commentVanity(c);
+    return {
+      author: commentAuthor(c),
+      text: commentText(c).slice(0, 600),
+      byPostAuthor: commentIsByPostAuthor(c),
+      isMe: !!(meVanity && v === meVanity),
+      isTarget: c === target,
+    };
+  }
 
   function isReplyIcon(b) {
     return b.getAttribute("aria-label") === "Reply" && (b.textContent || "").trim() === "";
@@ -611,14 +675,13 @@
       root.appendChild(buildSetupPanel());
       return;
     }
+    if (!meVanity) await loadMe();
     const ctx = postContextFor(container, container.getBoundingClientRect());
-    const target = {
-      text: commentText(container),
-      author: commentAuthor(container),
-      byPostAuthor: commentIsByPostAuthor(container),
-    };
-    const authorDefault = yourName && ctx.author && ctx.author.toLowerCase() === yourName.toLowerCase();
-    const panel = buildPanel(null, { mode: "reply", ctx, target, asAuthorDefault: authorDefault });
+    const postVanity = postVanityFor(container, ctx.card);
+    const asAuthor = !!(meVanity && postVanity && postVanity === meVanity);
+    const thread = threadFor(container).map((c) => describeComment(c, container)).slice(0, 14);
+    const target = thread.find((t) => t.isTarget) || describeComment(container, container);
+    const panel = buildPanel(null, { mode: "reply", ctx, target, thread, asAuthor });
     root.appendChild(panel);
     panel.qcGenerate();
   }
@@ -681,8 +744,8 @@
       const above = cards.filter((c) => c.getBoundingClientRect().top <= rect.top);
       card = above.length ? above[above.length - 1] : cards[0] || null;
     }
-    if (!card) return { post: "", author: "" };
-    return { post: getPostText(card), author: getAuthor(card) || "" };
+    if (!card) return { post: "", author: "", card: null };
+    return { post: getPostText(card), author: getAuthor(card) || "", card };
   }
 
   function showBubble(info) {
@@ -708,7 +771,9 @@
   function openReplyPanel(info) {
     closeFloating();
     const ctx = postContextFor(info.node, info.rect);
-    const target = { text: info.text, author: guessCommenter(info.node) };
+    const postVanity = postVanityFor(info.node, ctx.card);
+    const asAuthor = !!(meVanity && postVanity && postVanity === meVanity);
+    const target = { text: info.text, author: guessCommenter(info.node), byPostAuthor: false, isMe: false, isTarget: true };
 
     floating = document.createElement("div");
     floating.className = "qc-root qc-float";
@@ -729,7 +794,7 @@
     quote.className = "qc-float__quote";
     quote.textContent = info.text.length > 220 ? info.text.slice(0, 220) + "…" : info.text;
 
-    const panel = buildPanel(null, { mode: "reply", ctx, target });
+    const panel = buildPanel(null, { mode: "reply", ctx, target, thread: [target], asAuthor });
     floating.append(head, quote, panel);
     document.body.appendChild(floating);
 

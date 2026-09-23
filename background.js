@@ -67,11 +67,21 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       const reply = message.reply
         ? { text: String(message.reply.text || "").slice(0, 2000), author: String(message.reply.author || "").slice(0, 80), byPostAuthor: !!message.reply.byPostAuthor }
         : null;
+      const thread = Array.isArray(message.thread)
+        ? message.thread.slice(0, 14).map((t) => ({
+            author: String(t.author || "").slice(0, 80),
+            text: String(t.text || "").slice(0, 600),
+            byPostAuthor: !!t.byPostAuthor,
+            isMe: !!t.isMe,
+            isTarget: !!t.isTarget,
+          }))
+        : [];
       const taste = await recentTaste(hashText(reply ? reply.text : post));
       const prompt = buildPrompt({
         post,
         author,
         reply,
+        thread,
         asAuthor: !!message.asAuthor,
         knobs,
         persona: settings.persona,
@@ -96,7 +106,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       const comments = (parsed.comments || []).map((c) => String(c.text || "").trim()).filter(Boolean).slice(0, QC_OPTION_COUNT);
       if (!comments.length) throw new Error("No comments came back.");
       const read = parsed.read || null;
-      const entry = await recordHistory({ data, author, post, knobs, comments, read, reply, asAuthor: !!message.asAuthor });
+      const entry = await recordHistory({ data, author, post, knobs, comments, read, reply, asAuthor: !!message.asAuthor, threadSize: thread.length });
       sendResponse({ ok: true, comments, read, model: data.model, id: entry.id, cost: entry.cost });
     } catch (err) {
       sendResponse({ ok: false, error: String(err?.message || err) });
@@ -198,7 +208,7 @@ async function recordUsage(data) {
 // ---------------------------------------------------------------------
 // History: one entry per generation
 // ---------------------------------------------------------------------
-async function recordHistory({ data, author, post, knobs, comments, read, reply, asAuthor }) {
+async function recordHistory({ data, author, post, knobs, comments, read, reply, asAuthor, threadSize = 0 }) {
   const { inputTokens, outputTokens, cost } = costOf(data);
   const entry = {
     id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -206,6 +216,7 @@ async function recordHistory({ data, author, post, knobs, comments, read, reply,
     kind: reply ? "reply" : "comment",
     reply: reply ? { author: reply.author, text: reply.text.slice(0, 300) } : null,
     asAuthor: !!asAuthor,
+    threadSize,
     author: author || "",
     post: String(post || "").slice(0, 400),
     knobs: { ...knobs },
@@ -321,7 +332,23 @@ function replyRules(reply, asAuthor) {
   ];
 }
 
-function buildPrompt({ post, author, reply = null, asAuthor = false, knobs, persona, feedback = [], taste = { liked: [], disliked: [] } }) {
+function threadBlock(thread, reply) {
+  if (!thread.length) return [];
+  const lines = ["", "The conversation under the post so far, oldest first. The line marked >>> is the one to reply to; everything after it is also context."];
+  thread.forEach((t) => {
+    const tags = [];
+    if (t.isMe) tags.push("this is the user");
+    if (t.byPostAuthor) tags.push("wrote the post");
+    const who = `${t.author || "unknown"}${tags.length ? ` (${tags.join(", ")})` : ""}`;
+    lines.push(`${t.isTarget ? ">>> " : "- "}${who}: ${t.text}`);
+  });
+  if (thread.some((t) => t.isMe && !t.isTarget)) {
+    lines.push("Lines marked 'this is the user' were written by the user earlier in this thread. The reply must follow on from them: no repeating what the user already said, no contradicting it, and no reintroducing themselves.");
+  }
+  return lines;
+}
+
+function buildPrompt({ post, author, reply = null, thread = [], asAuthor = false, knobs, persona, feedback = [], taste = { liked: [], disliked: [] } }) {
   const system = [
     "You draft LinkedIn comments for the user to post under other people's posts. Think of it as replying to a message from someone you know a bit: light, quick, human. Not a fan, not a marketer, not an assistant, not a critic writing a review.",
     "",
@@ -379,6 +406,7 @@ function buildPrompt({ post, author, reply = null, asAuthor = false, knobs, pers
           "<comment>",
           reply.text,
           "</comment>",
+          ...threadBlock(thread, reply),
         ]
       : []),
     fb ? "\n" + fb : "",
