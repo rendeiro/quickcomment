@@ -242,3 +242,64 @@
 .qc-link { color: inherit; text-decoration: underline; }
 
 .qc-setup__text { margin-bottom: 8px; }
+
+/* Selection bubble and floating reply panel */
+.qc-bubble {
+  position: absolute;
+  z-index: 2147483000;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  font: 600 13px/1.3 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.9);
+  border: 0;
+  border-radius: 999px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+  cursor: pointer;
+}
+.qc-bubble .qc-trigger__spark { color: #1ec371; font-size: 12px; }
+
+.qc-float {
+  position: absolute;
+  z-index: 2147483000;
+  align-items: stretch;
+  padding: 0;
+  background: #fff;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+}
+.qc-float .qc-panel {
+  margin-top: 0;
+  border: 0;
+  border-radius: 0 0 8px 8px;
+}
+.qc-float__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px 6px;
+  font-size: 14px;
+  font-weight: 600;
+}
+.qc-float__close {
+  font: inherit;
+  font-size: 18px;
+  line-height: 1;
+  border: 0;
+  background: transparent;
+  color: var(--qc-ink-soft);
+  cursor: pointer;
+  padding: 0 4px;
+}
+.qc-float__close:hover { color: var(--qc-ink); }
+.qc-float__quote {
+  margin: 0 12px 6px;
+  padding: 6px 10px;
+  border-left: 3px solid var(--qc-line);
+  font-size: 13px;
+  color: var(--qc-ink-soft);
+}

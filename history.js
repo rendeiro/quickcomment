@@ -62,7 +62,11 @@ function renderEntry(h) {
 
   const post = document.createElement("div");
   post.className = "entry__post";
-  post.textContent = h.post.length >= 400 ? h.post + "…" : h.post;
+  if (h.kind === "reply" && h.reply) {
+    post.textContent = `↳ Reply to ${h.reply.author || "a comment"}${h.asAuthor ? " (on your own post)" : ""}: ${h.reply.text}`;
+  } else {
+    post.textContent = h.post.length >= 400 ? h.post + "…" : h.post;
+  }
 
   el.append(head, post);
   if (h.read) {

@@ -42,6 +42,11 @@
     }
   }
 
+  let replyAsAuthorDefault = false;
+  chrome.storage.local.get("replyAsAuthor").then((s) => {
+    replyAsAuthorDefault = !!(s && s.replyAsAuthor);
+  });
+
   let knobs = { ...QC_DEFAULT_KNOBS };
   chrome.storage.local.get("knobs").then((s) => {
     if (!s || !s.knobs) return;
@@ -245,7 +250,7 @@
   // Panel: results first, then a footer with Regenerate and a collapsed
   // Options toggle for the knobs. Every round's options and votes are kept
   // on the panel so regeneration can send them back as feedback.
-  function buildPanel(card) {
+  function buildPanel(card, opts = null) {
     const panel = document.createElement("div");
     panel.className = "qc-panel";
     panel.addEventListener("click", (e) => e.stopPropagation());
@@ -266,7 +271,26 @@
     optionsBtn.textContent = "Options";
     const status = document.createElement("span");
     status.className = "qc-status";
-    footer.append(go, optionsBtn, status);
+    footer.append(go, optionsBtn);
+
+    // Reply mode: a pill that says whether the user wrote the post being
+    // discussed. Changes the register a lot, so it sits in the footer.
+    let asAuthor = false;
+    if (opts?.mode === "reply") {
+      asAuthor = !!replyAsAuthorDefault;
+      const pill = document.createElement("button");
+      pill.type = "button";
+      pill.className = "qc-pill" + (asAuthor ? " qc-pill--on" : "");
+      pill.textContent = "I wrote the post";
+      pill.addEventListener("click", () => {
+        asAuthor = !asAuthor;
+        replyAsAuthorDefault = asAuthor;
+        pill.classList.toggle("qc-pill--on", asAuthor);
+        if (alive()) chrome.storage.local.set({ replyAsAuthor: asAuthor });
+      });
+      footer.appendChild(pill);
+    }
+    footer.appendChild(status);
 
     const knobsWrap = document.createElement("div");
     knobsWrap.className = "qc-knobs";
@@ -279,7 +303,7 @@
 
     panel.append(results, footer, knobsWrap);
 
-    panel.qcGenerate = () => generate(card, { go, status, results, rounds });
+    panel.qcGenerate = () => generate(card, opts, { go, status, results, rounds, asAuthor: () => asAuthor });
     go.addEventListener("click", panel.qcGenerate);
     return panel;
   }
@@ -310,23 +334,33 @@
     return row;
   }
 
-  async function generate(card, ui) {
+  async function generate(card, opts, ui) {
     const { go, status, results, rounds } = ui;
-    const post = getPostText(card);
-    const author = getAuthor(card);
-    if (!post) {
+    const isReply = opts?.mode === "reply";
+    const post = isReply ? opts.ctx.post : getPostText(card);
+    const author = isReply ? opts.ctx.author : getAuthor(card);
+    const reply = isReply ? opts.target : null;
+    if (!post && !reply) {
       status.textContent = "Could not read the post text.";
       return;
     }
     go.disabled = true;
     go.classList.add("qc-go--busy");
-    status.textContent = rounds.length ? "Rewriting with your feedback…" : "Reading the post…";
+    status.textContent = rounds.length ? "Rewriting with your feedback…" : isReply ? "Reading the comment…" : "Reading the post…";
     status.classList.remove("qc-status--error");
 
     const feedback = rounds.flatMap((r) =>
       r.comments.map((text, i) => ({ text, vote: r.votes[i] || 0 }))
     );
-    const response = await send({ type: "qc-generate", post, author, knobs: { ...knobs }, feedback });
+    const response = await send({
+      type: "qc-generate",
+      post,
+      author,
+      reply,
+      asAuthor: isReply ? !!ui.asAuthor() : false,
+      knobs: { ...knobs },
+      feedback,
+    });
     go.disabled = false;
     go.classList.remove("qc-go--busy");
 
@@ -420,6 +454,147 @@
     item.append(body, side);
     return item;
   }
+
+  // ------------------------------------------------------------------
+  // Reply ideas from a text selection. Highlight any comment's text and a
+  // small bubble appears; click it and a floating panel opens under the
+  // selection with reply options. No dependence on LinkedIn's comment
+  // markup: the selection is the comment, the nearest post card above it
+  // is the context.
+  // ------------------------------------------------------------------
+  let bubble = null;
+  let floating = null;
+
+  function hideBubble() {
+    if (bubble) bubble.remove();
+    bubble = null;
+  }
+  function closeFloating() {
+    if (floating) floating.remove();
+    floating = null;
+  }
+
+  function selectionInfo() {
+    const sel = window.getSelection();
+    if (!sel || sel.isCollapsed || sel.rangeCount === 0) return null;
+    const text = sel.toString().replace(/\s+/g, " ").trim();
+    if (text.length < 4 || text.length > 2000) return null;
+    const range = sel.getRangeAt(0);
+    let node = range.commonAncestorContainer;
+    if (node.nodeType !== Node.ELEMENT_NODE) node = node.parentElement;
+    if (!node || node.closest(".qc-root, .qc-bubble")) return null;
+    if (node.closest('[contenteditable="true"], input, textarea')) return null;
+    const rect = range.getBoundingClientRect();
+    if (!rect.width && !rect.height) return null;
+    return { text, node, rect };
+  }
+
+  // Best effort: the commenter's name is the first profile link in the
+  // smallest ancestor that has one.
+  function guessCommenter(node) {
+    let el = node;
+    for (let i = 0; i < 8 && el; i += 1) {
+      const link = el.querySelector ? el.querySelector('a[href*="/in/"], a[href*="/company/"]') : null;
+      if (link) {
+        const name = (link.textContent || "").replace(/\s+/g, " ").trim().split(/ • | · /)[0];
+        if (name && name.length < 60) return name;
+      }
+      el = el.parentElement;
+    }
+    return "";
+  }
+
+  // The post the comment belongs to: the card containing the selection,
+  // else the nearest wired card above it on the page.
+  function postContextFor(node, rect) {
+    let card = node.closest(`[${WIRED_ATTR}="1"]`);
+    if (!card) {
+      const cards = Array.from(document.querySelectorAll(`[${WIRED_ATTR}="1"]`));
+      const above = cards.filter((c) => c.getBoundingClientRect().top <= rect.top);
+      card = above.length ? above[above.length - 1] : cards[0] || null;
+    }
+    if (!card) return { post: "", author: "" };
+    return { post: getPostText(card), author: getAuthor(card) || "" };
+  }
+
+  function showBubble(info) {
+    hideBubble();
+    bubble = document.createElement("button");
+    bubble.type = "button";
+    bubble.className = "qc-bubble";
+    bubble.innerHTML = '<span class="qc-trigger__spark">✦</span> Reply ideas';
+    bubble.addEventListener("mousedown", (e) => e.preventDefault()); // keep the selection
+    bubble.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      hideBubble();
+      openReplyPanel(info);
+    });
+    document.body.appendChild(bubble);
+    const top = window.scrollY + info.rect.top - bubble.offsetHeight - 8;
+    const left = window.scrollX + Math.max(8, Math.min(info.rect.left, window.innerWidth - bubble.offsetWidth - 8));
+    bubble.style.top = `${Math.max(window.scrollY + 8, top)}px`;
+    bubble.style.left = `${left}px`;
+  }
+
+  function openReplyPanel(info) {
+    closeFloating();
+    const ctx = postContextFor(info.node, info.rect);
+    const target = { text: info.text, author: guessCommenter(info.node) };
+
+    floating = document.createElement("div");
+    floating.className = "qc-root qc-float";
+
+    const head = document.createElement("div");
+    head.className = "qc-float__head";
+    const title = document.createElement("span");
+    title.innerHTML = `<span class="qc-trigger__spark">✦</span> Reply to ${escapeHtml(target.author || "this comment")}`;
+    const close = document.createElement("button");
+    close.type = "button";
+    close.className = "qc-float__close";
+    close.setAttribute("aria-label", "Close");
+    close.textContent = "×";
+    close.addEventListener("click", closeFloating);
+    head.append(title, close);
+
+    const quote = document.createElement("div");
+    quote.className = "qc-float__quote";
+    quote.textContent = info.text.length > 220 ? info.text.slice(0, 220) + "…" : info.text;
+
+    const panel = buildPanel(null, { mode: "reply", ctx, target });
+    floating.append(head, quote, panel);
+    document.body.appendChild(floating);
+
+    const width = Math.min(560, window.innerWidth - 32);
+    floating.style.width = `${width}px`;
+    const left = window.scrollX + Math.max(16, Math.min(info.rect.left, window.innerWidth - width - 16));
+    floating.style.left = `${left}px`;
+    floating.style.top = `${window.scrollY + info.rect.bottom + 8}px`;
+    panel.qcGenerate();
+  }
+
+  function escapeHtml(t) {
+    return String(t).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  }
+
+  document.addEventListener("mouseup", (e) => {
+    if (e.target.closest && e.target.closest(".qc-bubble, .qc-root")) return;
+    setTimeout(() => {
+      const info = selectionInfo();
+      if (info) showBubble(info);
+      else hideBubble();
+    }, 10);
+  });
+  document.addEventListener("selectionchange", () => {
+    const sel = window.getSelection();
+    if (!sel || sel.isCollapsed) hideBubble();
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+      hideBubble();
+      closeFloating();
+    }
+  });
 
   // ------------------------------------------------------------------
   // Discovery loop: full rescans, debounced, on any DOM change. Cheap

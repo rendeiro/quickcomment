@@ -84,7 +84,7 @@ async function refreshActivity() {
     meta.className = "item__meta";
     const left = document.createElement("span");
     const author = document.createElement("b");
-    author.textContent = h.author || "Unknown";
+    author.textContent = (h.kind === "reply" ? "↳ " : "") + (h.kind === "reply" ? (h.reply?.author || "reply") : (h.author || "Unknown"));
     left.append(author, document.createTextNode(` · ${timeAgo(h.ts)}`));
     const right = document.createElement("span");
     right.textContent = `$${(h.cost || 0).toFixed(4)}`;
@@ -172,11 +172,20 @@ load();
 
 $("copyDiag").addEventListener("click", async () => {
   const { diag, diagAt } = await chrome.storage.local.get(["diag", "diagAt"]);
+  const box = $("diagBox");
   if (!diag) {
-    $("diagHint").textContent = "Nothing yet. Open a LinkedIn post with comments, wait 10 seconds, try again.";
+    $("diagHint").textContent = "Nothing stored yet. Open any LinkedIn page, wait 10 seconds, try again.";
     return;
   }
-  await navigator.clipboard.writeText(diag);
+  box.hidden = false;
+  box.value = diag;
+  box.focus();
+  box.select();
   const age = Math.round((Date.now() - diagAt) / 1000);
-  $("diagHint").textContent = `Copied (${age}s old). Paste it to Claude.`;
+  try {
+    await navigator.clipboard.writeText(diag);
+    $("diagHint").textContent = `Copied (${age}s old). Paste it to Claude. It is also selected below: Cmd+C works too.`;
+  } catch {
+    $("diagHint").textContent = `Selected below (${age}s old). Press Cmd+C, then paste it to Claude.`;
+  }
 });

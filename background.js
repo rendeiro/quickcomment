@@ -64,8 +64,18 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
       const { author, knobs } = message;
       const post = trimPost(message.post);
-      const taste = await recentTaste(hashText(post));
-      const prompt = buildPrompt({ post, author, knobs, persona: settings.persona, feedback: message.feedback || [], taste });
+      const reply = message.reply ? { text: String(message.reply.text || "").slice(0, 2000), author: String(message.reply.author || "").slice(0, 80) } : null;
+      const taste = await recentTaste(hashText(reply ? reply.text : post));
+      const prompt = buildPrompt({
+        post,
+        author,
+        reply,
+        asAuthor: !!message.asAuthor,
+        knobs,
+        persona: settings.persona,
+        feedback: message.feedback || [],
+        taste,
+      });
       const data = await callClaude(settings, {
         system: prompt.system,
         user: prompt.user,
@@ -84,7 +94,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       const comments = (parsed.comments || []).map((c) => String(c.text || "").trim()).filter(Boolean).slice(0, QC_OPTION_COUNT);
       if (!comments.length) throw new Error("No comments came back.");
       const read = parsed.read || null;
-      const entry = await recordHistory({ data, author, post, knobs, comments, read });
+      const entry = await recordHistory({ data, author, post, knobs, comments, read, reply, asAuthor: !!message.asAuthor });
       sendResponse({ ok: true, comments, read, model: data.model, id: entry.id, cost: entry.cost });
     } catch (err) {
       sendResponse({ ok: false, error: String(err?.message || err) });
@@ -186,11 +196,14 @@ async function recordUsage(data) {
 // ---------------------------------------------------------------------
 // History: one entry per generation
 // ---------------------------------------------------------------------
-async function recordHistory({ data, author, post, knobs, comments, read }) {
+async function recordHistory({ data, author, post, knobs, comments, read, reply, asAuthor }) {
   const { inputTokens, outputTokens, cost } = costOf(data);
   const entry = {
     id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     ts: Date.now(),
+    kind: reply ? "reply" : "comment",
+    reply: reply ? { author: reply.author, text: reply.text.slice(0, 300) } : null,
+    asAuthor: !!asAuthor,
     author: author || "",
     post: String(post || "").slice(0, 400),
     knobs: { ...knobs },
@@ -199,7 +212,7 @@ async function recordHistory({ data, author, post, knobs, comments, read }) {
     copied: [], // indices of the options the user copied (unique)
     votes: {}, // index -> 1 (up) | -1 (down)
     copies: 0, // total copy clicks on this generation
-    postHash: hashText(post),
+    postHash: hashText(reply ? reply.text : post),
     model: data.model,
     inputTokens,
     outputTokens,
@@ -289,7 +302,24 @@ function feedbackBlock(feedback, taste) {
   return lines.join("\n");
 }
 
-function buildPrompt({ post, author, knobs, persona, feedback = [], taste = { liked: [], disliked: [] } }) {
+function replyRules(reply, asAuthor) {
+  if (!reply) return [];
+  return [
+    "",
+    "MODE: REPLY TO A COMMENT. The thing to respond to is the comment, not the post. The post is background so you understand what the comment refers to.",
+    "In STEP 1, read the COMMENT: gist = what the comment says or does; author_tone = the commenter's tone; author_wants = what the commenter is doing (asking, agreeing, pushing back, joking, adding their own story, selling something); hook = the one specific detail in the comment worth picking up; language = the comment's language.",
+    "Reply rules:",
+    "- If the comment asks a question, the first sentence answers it.",
+    "- If it pushes back, engage with the actual objection. Do not concede for politeness, do not get defensive.",
+    "- If it adds a story or a fact, build on that, not on the original post.",
+    "- Never thank them for commenting, never say you appreciate their input, never restate the post.",
+    asAuthor
+      ? "- You WROTE the post. Reply as the person who lived it: first person, direct, specific. You can add a detail you left out of the post. No hosting voice, no 'great question'."
+      : "- You did NOT write the post. You are a third person joining the thread. Do not speak for the author or explain their intent. Bring your own angle.",
+  ];
+}
+
+function buildPrompt({ post, author, reply = null, asAuthor = false, knobs, persona, feedback = [], taste = { liked: [], disliked: [] } }) {
   const system = [
     "You draft LinkedIn comments for the user to post under other people's posts. Think of it as replying to a message from someone you know a bit: light, quick, human. Not a fan, not a marketer, not an assistant, not a critic writing a review.",
     "",
@@ -319,6 +349,7 @@ function buildPrompt({ post, author, knobs, persona, feedback = [], taste = { li
     "- Stack exclamation marks. At most one across all options, and only if the style knob allows it.",
     "",
     "Voice: plain words, contractions, short sentences. Specific beats clever. Under-write rather than over-write. Output ready to paste: no quotes, no numbering, no labels.",
+    ...replyRules(reply, asAuthor),
     "",
     `Produce exactly ${QC_OPTION_COUNT} options with different angles: one reacts to the hook, one brings something from the commenter's own side, one asks the author a question they would enjoy answering. All three obey the knobs. Vary length and rhythm within the size limit.`,
     "",
@@ -333,12 +364,21 @@ function buildPrompt({ post, author, knobs, persona, feedback = [], taste = { li
 
   const fb = feedbackBlock(feedback, taste);
   const user = [
-    `Post author: ${author || "unknown"}`,
+    `Post author: ${author || "unknown"}${reply && asAuthor ? " (this is the user, who is replying)" : ""}`,
     "",
-    "Post text:",
+    reply ? "Post text (background only):" : "Post text:",
     "<post>",
-    post,
+    post || "(post text not available)",
     "</post>",
+    ...(reply
+      ? [
+          "",
+          `Comment to reply to, by ${reply.author || "unknown commenter"}:`,
+          "<comment>",
+          reply.text,
+          "</comment>",
+        ]
+      : []),
     fb ? "\n" + fb : "",
     "",
     `Return JSON: a "read" object (gist, author_tone, author_wants, hook, language), then a "comments" array of ${QC_OPTION_COUNT} objects, each with a "text" field.`,
