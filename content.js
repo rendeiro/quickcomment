@@ -465,7 +465,60 @@
     console.log(T, "parent:", card.parentElement.tagName, `children=${card.parentElement.children.length}`, "class=", card.parentElement.className.slice(0, 80));
   }
 
+  // Comment-thread readout. Written to storage so the popup's "Copy debug
+  // info" button can put it on the clipboard; no console work needed.
+  function describe(el) {
+    if (!el) return "null";
+    const tag = el.tagName.toLowerCase();
+    const role = el.getAttribute("role") ? ` role=${el.getAttribute("role")}` : "";
+    const aria = el.getAttribute("aria-label") ? ` aria="${el.getAttribute("aria-label").slice(0, 50)}"` : "";
+    return `${tag}${role}${aria} kids=${el.children.length} text=${(el.textContent || "").replace(/\s+/g, " ").trim().length}`;
+  }
+
+  function commentDiag() {
+    const out = [];
+    const lab = (b) => ((b.getAttribute("aria-label") || "") + " | " + (b.textContent || "")).replace(/\s+/g, " ").trim().slice(0, 80);
+    const controls = Array.from(document.querySelectorAll('button, [role="button"], a'));
+    const replyBtns = controls.filter((b) => /^reply\b|\breply to\b|^responder\b/i.test(lab(b)) && !b.closest(".qc-root"));
+    out.push(`url: ${location.href}`);
+    out.push(`reply-like controls: ${replyBtns.length}`);
+    const navImgs = Array.from(document.querySelectorAll("header img[alt], nav img[alt], [role='banner'] img[alt]")).map((i) => i.alt).filter(Boolean).slice(0, 5);
+    out.push(`nav image alts (for detecting your own name): ${JSON.stringify(navImgs)}`);
+    const authorBadges = Array.from(document.querySelectorAll("span, div")).filter((e) => e.children.length === 0 && /^author$/i.test((e.textContent || "").trim())).length;
+    out.push(`"Author" badges on page: ${authorBadges}`);
+    replyBtns.slice(0, 3).forEach((btn, n) => {
+      out.push("");
+      out.push(`--- reply control ${n}: ${lab(btn)}`);
+      let el = btn;
+      for (let depth = 0; depth < 9 && el; depth += 1) {
+        const replies = el.querySelectorAll ? Array.from(el.querySelectorAll('button, [role="button"], a')).filter((b) => /^reply\b|\breply to\b/i.test(lab(b))).length : 0;
+        out.push(`  up${depth}: ${describe(el)} replyControlsInside=${replies}`);
+        el = el.parentElement;
+      }
+      // Candidate container: largest ancestor with exactly one Reply control.
+      let cand = btn;
+      let up = btn.parentElement;
+      while (up && Array.from(up.querySelectorAll('button, [role="button"], a')).filter((b) => /^reply\b|\breply to\b/i.test(lab(b))).length === 1) {
+        cand = up;
+        up = up.parentElement;
+      }
+      out.push(`  candidate container: ${describe(cand)}`);
+      const ctrls = Array.from(cand.querySelectorAll('button, [role="button"], a')).map(lab).filter(Boolean).slice(0, 20);
+      out.push(`  controls in container: ${JSON.stringify(ctrls)}`);
+      const links = Array.from(cand.querySelectorAll("a[href]")).map((a) => a.getAttribute("href").slice(0, 60)).slice(0, 6);
+      out.push(`  links in container: ${JSON.stringify(links)}`);
+      const blocks = Array.from(cand.querySelectorAll("p, span, div")).filter((e) => e.children.length === 0 && (e.textContent || "").trim().length > 25).map((e) => `${e.tagName.toLowerCase()}: ${(e.textContent || "").replace(/\s+/g, " ").trim().slice(0, 90)}`).slice(0, 6);
+      out.push(`  text blocks in container: ${JSON.stringify(blocks)}`);
+      out.push(`  container text: ${(cand.textContent || "").replace(/\s+/g, " ").trim().slice(0, 300)}`);
+    });
+    const text = out.join("\n");
+    console.log("[QuickComment] comment diag\n" + text);
+    chrome.storage.local.set({ diag: text, diagAt: Date.now() }).catch(() => {});
+  }
+
   console.log("[QuickComment] content script loaded on", location.href);
+  setTimeout(commentDiag, 6000);
+  setInterval(commentDiag, 15000);
   scan();
   [800, 2000, 4000].forEach((ms) => setTimeout(scan, ms));
   setTimeout(diagnostics, 5000);

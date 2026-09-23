@@ -168,3 +168,15 @@ chrome.storage.onChanged.addListener((changes) => {
 });
 
 load();
+
+
+$("copyDiag").addEventListener("click", async () => {
+  const { diag, diagAt } = await chrome.storage.local.get(["diag", "diagAt"]);
+  if (!diag) {
+    $("diagHint").textContent = "Nothing yet. Open a LinkedIn post with comments, wait 10 seconds, try again.";
+    return;
+  }
+  await navigator.clipboard.writeText(diag);
+  const age = Math.round((Date.now() - diagAt) / 1000);
+  $("diagHint").textContent = `Copied (${age}s old). Paste it to Claude.`;
+});
