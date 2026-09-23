@@ -35,6 +35,16 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     markCopied(message.id, message.index).then(() => sendResponse({ ok: true }));
     return true;
   }
+  if (message?.type === "qc-whoami") {
+    fetch("https://www.linkedin.com/in/me/", { redirect: "follow", credentials: "include" })
+      .then((res) => {
+        const m = String(res.url || "").match(/\/in\/([^/?#]+)/);
+        const vanity = m ? decodeURIComponent(m[1]).toLowerCase() : "";
+        sendResponse({ ok: true, vanity: vanity !== "me" ? vanity : "", url: res.url });
+      })
+      .catch((err) => sendResponse({ ok: false, error: String(err) }));
+    return true;
+  }
   if (message?.type === "qc-usage") {
     Promise.all([readUsage(), chrome.storage.local.get("totals")]).then(([usage, { totals }]) =>
       sendResponse({ ok: true, usage, totals: totals || null })

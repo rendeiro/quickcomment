@@ -275,6 +275,11 @@
       role.className = "qc-role";
       const who = opts.target?.author ? ` to ${opts.target.author}` : "";
       role.textContent = opts.asAuthor ? `Replying${who} as the post's author` : `Replying${who} as a reader`;
+      role.title = `you: ${meVanity || "unknown"}${meSource ? ` (${meSource})` : ""} · post author: ${opts.postVanity || "unknown"}`;
+      const why = document.createElement("span");
+      why.className = "qc-role__why";
+      why.textContent = ` · you: ${meVanity || "?"} · post: ${opts.postVanity || "?"}`;
+      role.appendChild(why);
       footer.appendChild(role);
     }
     footer.appendChild(status);
@@ -467,25 +472,54 @@
     const m = String(href || "").match(/\/in\/([^/?#]+)/);
     return m ? decodeURIComponent(m[1]).toLowerCase() : "";
   }
+  let meSource = "";
+  function rememberMe(v, source) {
+    meVanity = v;
+    meSource = source;
+    if (alive()) chrome.storage.local.set({ meVanity: v, meAt: Date.now(), meSource: source });
+    console.log(`[QuickComment] you are /in/${v} (via ${source})`);
+  }
+
+  // Three ways, tried in order:
+  // 1. same-origin fetch of /in/me/, which redirects to the profile
+  // 2. the same fetch from the background worker (page CSP cannot block it)
+  // 3. the page's own embedded data, which names the viewer's publicIdentifier
   async function loadMe() {
     try {
-      const s = await chrome.storage.local.get(["meVanity", "meAt"]);
+      const s = await chrome.storage.local.get(["meVanity", "meAt", "meSource"]);
       if (s && s.meVanity && Date.now() - (s.meAt || 0) < 86400000) {
         meVanity = s.meVanity;
+        meSource = s.meSource || "cache";
         return;
       }
     } catch {}
     try {
       const res = await fetch("https://www.linkedin.com/in/me/", { redirect: "follow", credentials: "include" });
       const v = vanityFromHref(res.url);
-      if (v && v !== "me") {
-        meVanity = v;
-        if (alive()) chrome.storage.local.set({ meVanity: v, meAt: Date.now() });
-        console.log("[QuickComment] you are /in/" + v);
-      }
+      if (v && v !== "me") return rememberMe(v, "page fetch");
+      console.log("[QuickComment] /in/me/ did not redirect from the page, final url:", res.url);
     } catch (err) {
-      console.log("[QuickComment] could not resolve /in/me/", err);
+      console.log("[QuickComment] /in/me/ fetch from page failed:", String(err));
     }
+    const bg = await send({ type: "qc-whoami" });
+    if (bg.ok && bg.vanity) return rememberMe(bg.vanity, "background fetch");
+    console.log("[QuickComment] /in/me/ from background:", bg.error || "no vanity");
+    const embedded = meFromEmbeddedData();
+    if (embedded) return rememberMe(embedded, "embedded data");
+    console.log("[QuickComment] could not find who you are");
+  }
+
+  function meFromEmbeddedData() {
+    const blobs = Array.from(document.querySelectorAll("code, script[type='application/json']"));
+    for (const b of blobs) {
+      const t = b.textContent || "";
+      if (!t.includes("publicIdentifier")) continue;
+      const me = t.match(/"\$type":"com\.linkedin\.voyager(?:\.dash)?\.common\.Me"[\s\S]{0,4000}?"publicIdentifier":"([^"]+)"/);
+      if (me) return me[1].toLowerCase();
+      const plain = t.match(/"publicIdentifier":"([^"]+)"[\s\S]{0,4000}?"\$type":"com\.linkedin\.voyager(?:\.dash)?\.common\.Me"/);
+      if (plain) return plain[1].toLowerCase();
+    }
+    return "";
   }
   loadMe();
 
@@ -498,7 +532,10 @@
       if (v) return v;
     }
     const m = location.pathname.match(/^\/posts\/([^_/]+)_/);
-    return m ? decodeURIComponent(m[1]).toLowerCase() : "";
+    if (m) return decodeURIComponent(m[1]).toLowerCase();
+    // A comment carrying the "Author" badge links to the post author.
+    const badged = replyIconsIn(document).map(commentContainerOf).filter(Boolean).find(commentIsByPostAuthor);
+    return badged ? commentVanity(badged) : "";
   }
 
   function commentVanity(container) {
@@ -681,7 +718,8 @@
     const asAuthor = !!(meVanity && postVanity && postVanity === meVanity);
     const thread = threadFor(container).map((c) => describeComment(c, container)).slice(0, 14);
     const target = thread.find((t) => t.isTarget) || describeComment(container, container);
-    const panel = buildPanel(null, { mode: "reply", ctx, target, thread, asAuthor });
+    console.log(`[QuickComment] reply role: you=${meVanity || "?"} post=${postVanity || "?"} asAuthor=${asAuthor}`);
+    const panel = buildPanel(null, { mode: "reply", ctx, target, thread, asAuthor, postVanity });
     root.appendChild(panel);
     panel.qcGenerate();
   }
@@ -794,7 +832,7 @@
     quote.className = "qc-float__quote";
     quote.textContent = info.text.length > 220 ? info.text.slice(0, 220) + "…" : info.text;
 
-    const panel = buildPanel(null, { mode: "reply", ctx, target, thread: [target], asAuthor });
+    const panel = buildPanel(null, { mode: "reply", ctx, target, thread: [target], asAuthor, postVanity });
     floating.append(head, quote, panel);
     document.body.appendChild(floating);
 
