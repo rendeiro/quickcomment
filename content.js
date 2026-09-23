@@ -23,12 +23,21 @@
   // invalidated"). Route every message through here so that case turns into
   // a visible note instead of a silent failure.
   const STALE_MSG = "QuickComment was updated. Refresh this page (Cmd+R) to keep using it.";
+  function alive() {
+    try {
+      return !!(chrome?.runtime?.id && chrome?.storage?.local);
+    } catch {
+      return false;
+    }
+  }
+
   async function send(message) {
+    if (!alive()) return { ok: false, error: STALE_MSG };
     try {
       const res = await chrome.runtime.sendMessage(message);
       return res || { ok: false, error: "No response from the extension. Refresh this page." };
     } catch (err) {
-      const stale = /context invalidated|Extension context/i.test(String(err));
+      const stale = /context invalidated|Extension context|sendMessage/i.test(String(err));
       return { ok: false, error: stale ? STALE_MSG : String(err?.message || err) };
     }
   }
@@ -292,7 +301,7 @@
       pill.textContent = opt.label;
       pill.addEventListener("click", () => {
         knobs[group] = opt.key;
-        chrome.storage.local.set({ knobs });
+        if (alive()) chrome.storage.local.set({ knobs });
         pills.querySelectorAll(".qc-pill").forEach((p) => p.classList.toggle("qc-pill--on", p === pill));
       });
       pills.appendChild(pill);
@@ -513,12 +522,20 @@
     });
     const text = out.join("\n");
     console.log("[QuickComment] comment diag\n" + text);
-    chrome.storage.local.set({ diag: text, diagAt: Date.now() }).catch(() => {});
+    try {
+      chrome.storage.local.set({ diag: text, diagAt: Date.now() }).catch(() => {});
+    } catch {}
   }
 
   console.log("[QuickComment] content script loaded on", location.href);
   setTimeout(commentDiag, 6000);
-  setInterval(commentDiag, 15000);
+  const diagTimer = setInterval(() => {
+    if (!alive()) {
+      clearInterval(diagTimer); // extension was reloaded; this copy is stale
+      return;
+    }
+    try { commentDiag(); } catch (err) { console.log("[QuickComment] diag error", err); }
+  }, 15000);
   scan();
   [800, 2000, 4000].forEach((ms) => setTimeout(scan, ms));
   setTimeout(diagnostics, 5000);
