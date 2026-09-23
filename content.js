@@ -278,7 +278,7 @@
       role.title = `you: ${meVanity || "unknown"}${meSource ? ` (${meSource})` : ""} · post author: ${opts.postVanity || "unknown"}`;
       const why = document.createElement("span");
       why.className = "qc-role__why";
-      why.textContent = ` · you: ${meVanity || "?"} · post: ${opts.postVanity || "?"}`;
+      why.textContent = ` · you: ${meVanity || meName || "?"} · post: ${opts.postVanity || opts.ctx?.author || "?"}`;
       role.appendChild(why);
       footer.appendChild(role);
     }
@@ -472,6 +472,37 @@
     const m = String(href || "").match(/\/in\/([^/?#]+)/);
     return m ? decodeURIComponent(m[1]).toLowerCase() : "";
   }
+  let meName = "";
+  const normName = (n) => String(n || "").toLowerCase().replace(/\s+/g, " ").trim();
+  function altToName(alt) {
+    const t = String(alt || "").replace(/^(photo of|picture of|profile photo of|foto de)\s+/i, "").trim();
+    if (!t || t.length > 60 || t.split(" ").length < 2) return "";
+    if (/^(linkedin|profile|avatar|photo)$/i.test(t)) return "";
+    return t;
+  }
+  // The user's own avatar sits next to every comment/reply editor. Its alt
+  // is the user's name. Checked whenever an editor is wired.
+  function learnMeFromEditor(editor) {
+    if (meName) return;
+    let el = editor.parentElement;
+    for (let i = 0; i < 6 && el && el !== document.body; i += 1) {
+      const imgs = Array.from(el.querySelectorAll("img[alt]")).filter((im) => !im.closest("[contenteditable]"));
+      for (const im of imgs) {
+        const n = altToName(im.getAttribute("alt"));
+        if (n) {
+          meName = n;
+          if (alive()) chrome.storage.local.set({ meName: n });
+          console.log(`[QuickComment] you are "${n}" (avatar next to the editor)`);
+          return;
+        }
+      }
+      el = el.parentElement;
+    }
+  }
+  chrome.storage.local.get("meName").then((s) => {
+    if (s && s.meName && !meName) meName = s.meName;
+  });
+
   let meSource = "";
   function rememberMe(v, source) {
     meVanity = v;
@@ -571,7 +602,7 @@
       author: commentAuthor(c),
       text: commentText(c).slice(0, 600),
       byPostAuthor: commentIsByPostAuthor(c),
-      isMe: !!(meVanity && v === meVanity),
+      isMe: !!((meVanity && v === meVanity) || (meName && normName(commentAuthor(c)) === normName(meName))),
       isTarget: c === target,
     };
   }
@@ -664,6 +695,7 @@
   function wireReplyEditors() {
     document.querySelectorAll('[contenteditable="true"]').forEach((editor) => {
       if (editor.hasAttribute(REPLY_EDITOR_WIRED) || editor.closest(".qc-root")) return;
+      learnMeFromEditor(editor);
       const box = replyBoxOf(editor);
       if (!box) return; // main comment box, or not a reply editor
       const container = commentForBox(box);
@@ -715,10 +747,12 @@
     if (!meVanity) await loadMe();
     const ctx = postContextFor(container, container.getBoundingClientRect());
     const postVanity = postVanityFor(container, ctx.card);
-    const asAuthor = !!(meVanity && postVanity && postVanity === meVanity);
+    const asAuthor =
+      !!(meVanity && postVanity && postVanity === meVanity) ||
+      !!(meName && ctx.author && normName(ctx.author) === normName(meName));
     const thread = threadFor(container).map((c) => describeComment(c, container)).slice(0, 14);
     const target = thread.find((t) => t.isTarget) || describeComment(container, container);
-    console.log(`[QuickComment] reply role: you=${meVanity || "?"} post=${postVanity || "?"} asAuthor=${asAuthor}`);
+    console.log(`[QuickComment] reply role: you=${meVanity || meName || "?"} post=${postVanity || ctx.author || "?"} asAuthor=${asAuthor}`);
     const panel = buildPanel(null, { mode: "reply", ctx, target, thread, asAuthor, postVanity });
     root.appendChild(panel);
     panel.qcGenerate();
@@ -810,7 +844,9 @@
     closeFloating();
     const ctx = postContextFor(info.node, info.rect);
     const postVanity = postVanityFor(info.node, ctx.card);
-    const asAuthor = !!(meVanity && postVanity && postVanity === meVanity);
+    const asAuthor =
+      !!(meVanity && postVanity && postVanity === meVanity) ||
+      !!(meName && ctx.author && normName(ctx.author) === normName(meName));
     const target = { text: info.text, author: guessCommenter(info.node), byPostAuthor: false, isMe: false, isTarget: true };
 
     floating = document.createElement("div");
@@ -966,6 +1002,17 @@
     out.push(`nav image alts (for detecting your own name): ${JSON.stringify(navImgs)}`);
     const authorBadges = Array.from(document.querySelectorAll("span, div")).filter((e) => e.children.length === 0 && /^author$/i.test((e.textContent || "").trim())).length;
     out.push(`"Author" badges on page: ${authorBadges}`);
+    out.push(`me: vanity=${meVanity || "?"} name=${meName || "?"}`);
+    const editors = Array.from(document.querySelectorAll('[contenteditable="true"]')).slice(0, 3);
+    editors.forEach((ed, i) => {
+      let el = ed.parentElement;
+      const alts = [];
+      for (let d = 0; d < 6 && el && el !== document.body; d += 1) {
+        el.querySelectorAll("img[alt]").forEach((im) => alts.push(im.getAttribute("alt").slice(0, 60)));
+        el = el.parentElement;
+      }
+      out.push(`editor ${i} nearby image alts: ${JSON.stringify(Array.from(new Set(alts)).slice(0, 8))}`);
+    });
     replyBtns.slice(0, 3).forEach((btn, n) => {
       out.push("");
       out.push(`--- reply control ${n}: ${lab(btn)}`);
