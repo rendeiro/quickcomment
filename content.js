@@ -577,17 +577,41 @@
     return String(t).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   }
 
-  document.addEventListener("mouseup", (e) => {
-    if (e.target.closest && e.target.closest(".qc-bubble, .qc-root")) return;
-    setTimeout(() => {
-      const info = selectionInfo();
-      if (info) showBubble(info);
-      else hideBubble();
-    }, 10);
-  });
+  let lastSelText = "";
+  function maybeShowBubble(source) {
+    const info = selectionInfo();
+    if (!info) {
+      hideBubble();
+      lastSelText = "";
+      return;
+    }
+    if (info.text === lastSelText && bubble) return;
+    lastSelText = info.text;
+    console.log(`[QuickComment] selection via ${source}: ${info.text.length} chars`);
+    showBubble(info);
+  }
+
+  // Capture phase: LinkedIn stops some mouse events from bubbling.
+  document.addEventListener(
+    "mouseup",
+    (e) => {
+      if (e.target?.closest && e.target.closest(".qc-bubble, .qc-root")) return;
+      setTimeout(() => maybeShowBubble("mouseup"), 10);
+    },
+    true
+  );
+  // The selection itself cannot be blocked by the page. Debounced so the
+  // bubble appears once the drag settles, and also covers keyboard selection.
+  let selTimer = null;
   document.addEventListener("selectionchange", () => {
+    clearTimeout(selTimer);
     const sel = window.getSelection();
-    if (!sel || sel.isCollapsed) hideBubble();
+    if (!sel || sel.isCollapsed) {
+      hideBubble();
+      lastSelText = "";
+      return;
+    }
+    selTimer = setTimeout(() => maybeShowBubble("selectionchange"), 350);
   });
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") {
